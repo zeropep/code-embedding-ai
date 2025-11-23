@@ -1,0 +1,80 @@
+pipeline:
+  name: "Code Embedding Pipeline"
+  version: "1.0.0"
+
+processing:
+  chunk_size:
+    min_tokens: 50
+    max_tokens: 500
+    overlap_tokens: 20
+
+  supported_languages:
+    - java
+    - kotlin
+    - html
+    - xml
+    - yaml
+    - properties
+
+  file_extensions:
+    java: [".java"]
+    kotlin: [".kt", ".kts"]
+    html: [".html", ".htm"]
+    xml: [".xml"]
+    yaml: [".yml", ".yaml"]
+    properties: [".properties"]
+
+  ignore_patterns:
+    - "*.class"
+    - "*.jar"
+    - "*.war"
+    - "target/"
+    - "build/"
+    - ".git/"
+    - "node_modules/"
+    - ".idea/"
+    - "*.log"
+
+parsing:
+  java:
+    extract_methods: true
+    extract_classes: true
+    extract_interfaces: true
+    extract_annotations: true
+    include_comments: false
+
+  kotlin:
+    extract_functions: true
+    extract_classes: true
+    extract_objects: true
+    include_comments: false
+
+  html:
+    extract_templates: true
+    extract_fragments: true
+    include_inline_scripts: true
+
+embeddings:
+  model: "jina-embeddings-v2-base-code"
+  api_endpoint: "https://api.jina.ai/v1/embeddings"
+  dimensions: 1024
+  max_retries: 3
+  timeout: 30
+  batch_size: 20
+
+database:
+  collection_name: "code_embeddings"
+  persistence: true
+  embedding_function: "jina"
+
+  metadata_fields:
+    - file_path
+    - function_name
+    - class_name
+    - layer_type
+    - line_start
+    - line_end
+    - chunk_tokens
+    - sensitivity_level
+    - last_updated
+    - file_hash

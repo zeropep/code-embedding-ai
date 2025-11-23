@@ -1,0 +1,48 @@
+# Core dependencies
+fastapi==0.104.1
+uvicorn==0.24.0
+click==8.1.7
+pydantic==2.5.0
+python-dotenv==1.0.0
+
+# AI/ML dependencies
+jina==3.23.0
+sentence-transformers==2.2.2
+transformers==4.36.0
+torch==2.1.0
+numpy==1.24.3
+
+# Vector database
+chromadb==0.4.18
+
+# Code parsing
+tree-sitter==0.20.4
+tree-sitter-java==0.20.2
+tree-sitter-kotlin==0.3.1
+javalang==0.13.0
+
+# Security scanning
+truffleHog==3.63.2
+detect-secrets==1.4.0
+
+# Git operations
+GitPython==3.1.40
+
+# Utilities
+pyyaml==6.0.1
+requests==2.31.0
+httpx==0.25.2
+aiofiles==23.2.1
+tenacity==8.2.3
+
+# Logging and monitoring
+structlog==23.2.0
+prometheus-client==0.19.0
+
+# Development dependencies
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+black==23.11.0
+flake8==6.1.0
+mypy==1.7.1

@@ -1,0 +1,87 @@
+security:
+  secret_scanning:
+    enabled: true
+    tools:
+      - truffleHog
+      - detect-secrets
+
+    patterns:
+      high_risk:
+        - "password"
+        - "secret"
+        - "key"
+        - "token"
+        - "credential"
+        - "auth"
+
+      medium_risk:
+        - "config"
+        - "settings"
+        - "properties"
+        - "env"
+
+      low_risk:
+        - "comment"
+        - "todo"
+        - "fixme"
+
+  masking:
+    enabled: true
+    preserve_syntax: true
+    placeholder_format: "[MASKED_{type}_{index}]"
+
+    rules:
+      passwords:
+        pattern: '(?i)(password|pwd|pass)\s*[=:]\s*["\']?([^"\'\\s]+)'
+        replacement: '[MASKED_PASSWORD]'
+
+      api_keys:
+        pattern: '(?i)(api_key|apikey|key)\s*[=:]\s*["\']?([A-Za-z0-9]{20,})'
+        replacement: '[MASKED_API_KEY]'
+
+      tokens:
+        pattern: '(?i)(token|access_token)\s*[=:]\s*["\']?([A-Za-z0-9_-]{20,})'
+        replacement: '[MASKED_TOKEN]'
+
+      urls_with_auth:
+        pattern: '(https?://)[^:]+:[^@]+@([^\s"\']+)'
+        replacement: '\1[MASKED_CREDENTIALS]@\2'
+
+  sensitivity_levels:
+    high:
+      threshold: 0.8
+      indicators:
+        - "password"
+        - "secret_key"
+        - "private_key"
+        - "credential"
+        - "database_url"
+
+    medium:
+      threshold: 0.5
+      indicators:
+        - "config"
+        - "setting"
+        - "property"
+        - "environment"
+
+    low:
+      threshold: 0.2
+      indicators:
+        - "public"
+        - "constant"
+        - "util"
+        - "helper"
+
+  whitelist:
+    patterns:
+      - "test_password"
+      - "example_key"
+      - "dummy_token"
+      - "placeholder_secret"
+
+    files:
+      - "test/**/*"
+      - "**/test/**/*"
+      - "**/*Test.java"
+      - "**/*Spec.java"

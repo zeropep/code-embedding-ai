@@ -1,0 +1,73 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "code-embedding-pipeline"
+version = "0.1.0"
+description = "AI Code Embedding Pipeline for Spring Boot codebases"
+authors = [
+    {name = "AI Assistant", email = "ai@example.com"}
+]
+requires-python = ">=3.8"
+dependencies = [
+    "fastapi>=0.104.1",
+    "uvicorn>=0.24.0",
+    "click>=8.1.7",
+    "pydantic>=2.5.0",
+    "python-dotenv>=1.0.0",
+    "jina>=3.23.0",
+    "sentence-transformers>=2.2.2",
+    "transformers>=4.36.0",
+    "torch>=2.1.0",
+    "numpy>=1.24.3",
+    "chromadb>=0.4.18",
+    "tree-sitter>=0.20.4",
+    "tree-sitter-java>=0.20.2",
+    "tree-sitter-kotlin>=0.3.1",
+    "javalang>=0.13.0",
+    "truffleHog>=3.63.2",
+    "detect-secrets>=1.4.0",
+    "GitPython>=3.1.40",
+    "pyyaml>=6.0.1",
+    "requests>=2.31.0",
+    "httpx>=0.25.2",
+    "aiofiles>=23.2.1",
+    "tenacity>=8.2.3",
+    "structlog>=23.2.0",
+    "prometheus-client>=0.19.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.3",
+    "pytest-asyncio>=0.21.1",
+    "pytest-cov>=4.1.0",
+    "black>=23.11.0",
+    "flake8>=6.1.0",
+    "mypy>=1.7.1",
+]
+
+[project.scripts]
+code-embedder = "src.main:cli"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "--cov=src --cov-report=term-missing"
