@@ -1,5 +1,7 @@
 # AI Code Embedding Pipeline
 
+## 한국어 가이드는 ./docs/README_ko.md 를 참조하세요.
+
 A Python-based pipeline for processing Spring Boot + Thymeleaf codebases to generate vector embeddings for semantic code search and analysis.
 
 ## Features
