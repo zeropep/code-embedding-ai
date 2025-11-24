@@ -1,8 +1,7 @@
 from dataclasses import dataclass
-from typing import List, Dict, Any, Optional, Set
+from typing import List, Dict, Any, Optional
 from enum import Enum
 import time
-from pathlib import Path
 
 
 class ChangeType(Enum):

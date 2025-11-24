@@ -1,6 +1,5 @@
 import json
 import time
-import pickle
 from pathlib import Path
 from typing import Dict, Optional, List, Any
 import structlog
@@ -51,9 +50,9 @@ class StateManager:
             self.current_state = state
 
             logger.debug("Repository state saved",
-                        commit=state.commit_hash[:8],
-                        branch=state.branch,
-                        total_files=state.total_files)
+                         commit=state.commit_hash[:8],
+                         branch=state.branch,
+                         total_files=state.total_files)
 
             return True
 
@@ -82,9 +81,9 @@ class StateManager:
             self.current_state = state
 
             logger.info("Repository state loaded",
-                       commit=state.commit_hash[:8],
-                       branch=state.branch,
-                       age_hours=(time.time() - state.timestamp) / 3600)
+                        commit=state.commit_hash[:8],
+                        branch=state.branch,
+                        age_hours=(time.time() - state.timestamp) / 3600)
 
             return state
 
@@ -93,7 +92,7 @@ class StateManager:
             return None
 
     def create_snapshot(self, repo_state: RepositoryState, total_chunks: int,
-                       metadata: Dict[str, Any] = None) -> StateSnapshot:
+                        metadata: Dict[str, Any] = None) -> StateSnapshot:
         """Create a state snapshot"""
         snapshot = StateSnapshot(
             snapshot_id=f"snapshot_{int(time.time())}",
@@ -112,8 +111,8 @@ class StateManager:
         self._save_snapshots()
 
         logger.info("State snapshot created",
-                   snapshot_id=snapshot.snapshot_id,
-                   total_chunks=total_chunks)
+                    snapshot_id=snapshot.snapshot_id,
+                    total_chunks=total_chunks)
 
         return snapshot
 
@@ -149,9 +148,9 @@ class StateManager:
             self._save_update_result_detail(result)
 
             logger.info("Update result saved",
-                       request_id=result.request_id,
-                       status=result.status.value,
-                       files_processed=result.files_processed)
+                        request_id=result.request_id,
+                        status=result.status.value,
+                        files_processed=result.files_processed)
 
             return True
 
@@ -184,8 +183,8 @@ class StateManager:
 
         if should_force:
             logger.info("Force full update triggered",
-                       hours_since_last=hours_since_last,
-                       threshold=self.config.force_update_threshold_hours)
+                        hours_since_last=hours_since_last,
+                        threshold=self.config.force_update_threshold_hours)
 
         return should_force
 
@@ -232,8 +231,8 @@ class StateManager:
         if removed_count > 0:
             self._save_snapshots()
             logger.info("Cleaned up old snapshots",
-                       removed_count=removed_count,
-                       retention_days=retention_days)
+                        removed_count=removed_count,
+                        retention_days=retention_days)
 
         # Clean up old result files
         results_dir = self.state_dir / "results"
@@ -246,7 +245,7 @@ class StateManager:
                         removed_count += 1
                 except Exception as e:
                     logger.warning("Failed to remove old result file",
-                                 file=str(result_file), error=str(e))
+                                   file=str(result_file), error=str(e))
 
         return removed_count
 

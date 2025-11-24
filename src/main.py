@@ -1,7 +1,5 @@
 import click
-import asyncio
 import structlog
-from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()

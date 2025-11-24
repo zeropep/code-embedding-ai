@@ -1,5 +1,4 @@
 import asyncio
-import uuid
 import time
 from typing import List, Dict, Any, Optional
 from pathlib import Path
@@ -8,7 +7,7 @@ import structlog
 from .git_monitor import GitMonitor
 from .state_manager import StateManager
 from .models import (UpdateRequest, UpdateResult, UpdateStatus, UpdateConfig,
-                     FileChange, ChangeType, ChangeDetectionResult)
+                     ChangeType, ChangeDetectionResult)
 
 from ..code_parser.code_parser import CodeParser
 from ..code_parser.models import ParserConfig
@@ -50,8 +49,8 @@ class UpdateService:
         self._update_task: Optional[asyncio.Task] = None
 
         logger.info("UpdateService initialized",
-                   repo_path=repo_path,
-                   state_dir=state_dir)
+                    repo_path=repo_path,
+                    state_dir=state_dir)
 
     async def start(self) -> bool:
         """Start the update service"""
@@ -101,9 +100,9 @@ class UpdateService:
     async def request_update(self, request: UpdateRequest) -> UpdateResult:
         """Process an update request"""
         logger.info("Processing update request",
-                   request_id=request.request_id,
-                   repo_path=request.repo_path,
-                   force_full=request.force_full_update)
+                    request_id=request.request_id,
+                    repo_path=request.repo_path,
+                    force_full=request.force_full_update)
 
         start_time = time.time()
 
@@ -151,10 +150,10 @@ class UpdateService:
             self.state_manager.save_update_result(result)
 
             logger.info("Update request completed",
-                       request_id=request.request_id,
-                       status=result.status.value,
-                       processing_time=result.processing_time,
-                       files_processed=result.files_processed)
+                        request_id=request.request_id,
+                        status=result.status.value,
+                        processing_time=result.processing_time,
+                        files_processed=result.files_processed)
 
             return result
 
@@ -206,7 +205,7 @@ class UpdateService:
                 current_state = self.state_manager.current_state
                 if current_state:
                     logger.info("Performing incremental update",
-                              last_commit=current_state.commit_hash[:8])
+                                last_commit=current_state.commit_hash[:8])
                     # Use Git diff to detect changes since last known state
                     return self.git_monitor.detect_changes(since_commit=current_state.commit_hash)
                 else:
@@ -218,7 +217,7 @@ class UpdateService:
             return None
 
     async def _process_changes(self, request: UpdateRequest,
-                             detection_result: ChangeDetectionResult) -> UpdateResult:
+                               detection_result: ChangeDetectionResult) -> UpdateResult:
         """Process detected changes"""
         result = UpdateResult(
             request_id=request.request_id,
@@ -264,13 +263,13 @@ class UpdateService:
                 result.chunks_deleted += delete_result.successful_items
 
                 logger.debug("File deleted from vector store",
-                           file_path=file_path,
-                           chunks_deleted=delete_result.successful_items)
+                             file_path=file_path,
+                             chunks_deleted=delete_result.successful_items)
 
             except Exception as e:
                 logger.error("Failed to delete file from vector store",
-                           file_path=file_path,
-                           error=str(e))
+                             file_path=file_path,
+                             error=str(e))
                 result.warnings.append(f"Failed to delete {file_path}: {str(e)}")
 
     async def _process_files(self, file_paths: List[str], result: UpdateResult):
@@ -323,8 +322,8 @@ class UpdateService:
             result.chunks_added += store_result.successful_items
 
             logger.info("Files processed successfully",
-                       files_processed=len(parsed_files),
-                       chunks_stored=store_result.successful_items)
+                        files_processed=len(parsed_files),
+                        chunks_stored=store_result.successful_items)
 
         except Exception as e:
             logger.error("Failed to process files", error=str(e))
@@ -333,7 +332,7 @@ class UpdateService:
     async def _periodic_update_loop(self):
         """Periodic update loop"""
         logger.info("Starting periodic update loop",
-                   interval_seconds=self.update_config.check_interval_seconds)
+                    interval_seconds=self.update_config.check_interval_seconds)
 
         while self._is_running:
             try:

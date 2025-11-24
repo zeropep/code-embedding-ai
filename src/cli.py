@@ -11,8 +11,6 @@ import asyncio
 import json
 import time
 import sys
-from pathlib import Path
-from typing import Dict, Any, Optional
 import structlog
 
 from .embeddings.embedding_pipeline import EmbeddingPipeline
@@ -22,7 +20,6 @@ from .embeddings.models import EmbeddingConfig
 from .database.models import VectorDBConfig
 from .database.vector_store import VectorStore
 from .updates.update_service import UpdateService
-from .updates.models import UpdateConfig, UpdateRequest
 
 
 # Configure logging for CLI
@@ -64,7 +61,6 @@ def cli(ctx, config, verbose):
 @cli.group()
 def process():
     """Commands for processing repositories and files"""
-    pass
 
 
 @process.command("repository")
@@ -105,7 +101,7 @@ def process_repository(ctx, repo_path, output_db, force, include, exclude, no_se
 
                 # Display summary
                 summary = result.get("processing_summary", {})
-                click.echo(f"📊 Summary:")
+                click.echo("📊 Summary:")
                 click.echo(f"  • Files processed: {summary.get('total_files_parsed', 0)}")
                 click.echo(f"  • Chunks created: {summary.get('total_chunks_created', 0)}")
                 click.echo(f"  • Embeddings generated: {summary.get('chunks_with_embeddings', 0)}")
@@ -114,7 +110,7 @@ def process_repository(ctx, repo_path, output_db, force, include, exclude, no_se
                 # Display security stats if enabled
                 if not no_security and "security_stats" in result:
                     sec_stats = result["security_stats"]["scan_summary"]
-                    click.echo(f"🔒 Security:")
+                    click.echo("🔒 Security:")
                     click.echo(f"  • Secrets found: {sec_stats.get('total_secrets_found', 0)}")
                     click.echo(f"  • Files with secrets: {sec_stats.get('files_with_secrets', 0)}")
 
@@ -162,7 +158,6 @@ def process_files(ctx, files, output_db):
 @cli.group()
 def search():
     """Commands for searching embeddings"""
-    pass
 
 
 @search.command("semantic")
@@ -171,7 +166,8 @@ def search():
 @click.option("--limit", default=10, help="Number of results")
 @click.option("--min-similarity", default=0.0, help="Minimum similarity score")
 @click.option("--show-content", is_flag=True, help="Show code content")
-@click.option("--format", "output_format", type=click.Choice(["table", "json", "simple"]), default="table", help="Output format")
+@click.option("--format", "output_format", type=click.Choice(["table", "json", "simple"]),
+              default="table", help="Output format")
 def semantic_search(query, db_path, limit, min_similarity, show_content, output_format):
     """Search for semantically similar code"""
     async def _search():
@@ -210,21 +206,22 @@ def semantic_search(query, db_path, limit, min_similarity, show_content, output_
 @click.option("--language", help="Filter by language")
 @click.option("--db-path", default="./embeddings.db", help="ChromaDB path")
 @click.option("--limit", default=10, help="Number of results")
-@click.option("--format", "output_format", type=click.Choice(["table", "json", "simple"]), default="table", help="Output format")
-def metadata_search(file_path, function_name, class_name, layer_type, language, db_path, limit, output_format):
+@click.option("--format", "output_format", type=click.Choice(["table", "json", "simple"]),
+              default="table", help="Output format")
+def metadata_search(fp, fn_name, cl_name, lyr_type, language, db_path, limit, output_format):
     """Search by metadata filters"""
     async def _search():
         try:
             # Build filters
             filters = {}
-            if file_path:
-                filters["file_path"] = file_path
-            if function_name:
-                filters["function_name"] = function_name
-            if class_name:
-                filters["class_name"] = class_name
-            if layer_type:
-                filters["layer_type"] = layer_type
+            if fp:
+                filters["file_path"] = fp
+            if fn_name:
+                filters["function_name"] = fn_name
+            if cl_name:
+                filters["class_name"] = cl_name
+            if lyr_type:
+                filters["layer_type"] = lyr_type
             if language:
                 filters["language"] = language
 
@@ -267,9 +264,12 @@ def metadata_search(file_path, function_name, class_name, layer_type, language, 
                     click.echo("-" * 95)
 
                     for result in results:
-                        file_path = result.metadata.get("file_path", "")[:38] + ".." if len(result.metadata.get("file_path", "")) > 40 else result.metadata.get("file_path", "")
-                        function_name = result.metadata.get("function_name", "")[:18] if result.metadata.get("function_name") else ""
-                        class_name = result.metadata.get("class_name", "")[:13] if result.metadata.get("class_name") else ""
+                        fpath = result.metadata.get("file_path", "")
+                        file_path = fpath[:38] + ".." if len(fpath) > 40 else fpath
+                        function_name = result.metadata.get("function_name", "")[
+                            :18] if result.metadata.get("function_name") else ""
+                        class_name = result.metadata.get("class_name", "")[
+                            :13] if result.metadata.get("class_name") else ""
                         layer_type = result.metadata.get("layer_type", "")[:8]
                         lines = f"{result.metadata.get('start_line', 0)}-{result.metadata.get('end_line', 0)}"
 
@@ -293,7 +293,6 @@ def metadata_search(file_path, function_name, class_name, layer_type, language, 
 @cli.group()
 def update():
     """Commands for incremental updates"""
-    pass
 
 
 @update.command("check")
@@ -311,7 +310,7 @@ def check_updates(repo_path, state_dir):
             try:
                 result = await update_service.quick_update()
 
-                click.echo(f"📊 Update check completed:")
+                click.echo("📊 Update check completed:")
                 click.echo(f"  • Status: {result.status.value}")
                 click.echo(f"  • Changes detected: {result.total_changes}")
                 click.echo(f"  • Files processed: {result.files_processed}")
@@ -353,7 +352,7 @@ def apply_updates(repo_path, state_dir, force):
 
                 if result.status.value == "completed":
                     click.echo("✅ Update completed successfully!")
-                    click.echo(f"📊 Summary:")
+                    click.echo("📊 Summary:")
                     click.echo(f"  • Files processed: {result.files_processed}")
                     click.echo(f"  • Chunks added: {result.chunks_added}")
                     click.echo(f"  • Chunks updated: {result.chunks_updated}")
@@ -376,7 +375,6 @@ def apply_updates(repo_path, state_dir, force):
 @cli.group()
 def server():
     """Server management commands"""
-    pass
 
 
 @server.command("start")
@@ -387,7 +385,7 @@ def start_server(host, port, reload):
     """Start the REST API server"""
     import uvicorn
 
-    click.echo(f"🚀 Starting Code Embedding AI API server")
+    click.echo("🚀 Starting Code Embedding AI API server")
     click.echo(f"🌐 Server will be available at: http://{host}:{port}")
     click.echo(f"📖 API documentation: http://{host}:{port}/docs")
 
@@ -403,7 +401,6 @@ def start_server(host, port, reload):
 @cli.group()
 def db():
     """Database management commands"""
-    pass
 
 
 @db.command("stats")
@@ -426,12 +423,12 @@ def show_stats(db_path):
         click.echo(f"  • Collection size: {stats.collection_size_mb:.2f} MB")
 
         if stats.language_counts:
-            click.echo(f"  • Languages:")
+            click.echo("  • Languages:")
             for lang, count in stats.language_counts.items():
                 click.echo(f"    - {lang}: {count:,}")
 
         if stats.layer_counts:
-            click.echo(f"  • Layers:")
+            click.echo("  • Layers:")
             for layer, count in stats.layer_counts.items():
                 click.echo(f"    - {layer}: {count:,}")
 

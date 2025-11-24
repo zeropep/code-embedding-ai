@@ -3,7 +3,7 @@ import hashlib
 import time
 import os
 from pathlib import Path
-from typing import List, Dict, Optional, Set, Tuple, Any
+from typing import List, Dict, Optional, Any
 import structlog
 
 from .models import (FileChange, ChangeType, RepositoryState, GitInfo,
@@ -39,8 +39,8 @@ class GitMonitor:
                 return False
 
             logger.info("Connected to Git repository",
-                       branch=self.repo.active_branch.name,
-                       commit=self.repo.head.commit.hexsha[:8])
+                        branch=self.repo.active_branch.name,
+                        commit=self.repo.head.commit.hexsha[:8])
             return True
 
         except git.InvalidGitRepositoryError:
@@ -71,9 +71,9 @@ class GitMonitor:
             )
 
             logger.debug("Repository state captured",
-                        commit=current_commit[:8],
-                        branch=current_branch,
-                        total_files=state.total_files)
+                         commit=current_commit[:8],
+                         branch=current_branch,
+                         total_files=state.total_files)
 
             return state
 
@@ -120,9 +120,9 @@ class GitMonitor:
             )
 
             logger.info("Change detection completed",
-                       changes_count=len(detected_changes),
-                       detection_time=detection_time,
-                       is_full_scan=is_full_scan)
+                        changes_count=len(detected_changes),
+                        detection_time=detection_time,
+                        is_full_scan=is_full_scan)
 
             # Update last known state
             self.last_known_state = current_state
@@ -150,18 +150,18 @@ class GitMonitor:
                     changes.append(change)
 
             logger.debug("Changes detected since commit",
-                        since_commit=since_commit[:8],
-                        changes_count=len(changes))
+                         since_commit=since_commit[:8],
+                         changes_count=len(changes))
 
         except Exception as e:
             logger.error("Failed to get changes since commit",
-                        since_commit=since_commit,
-                        error=str(e))
+                         since_commit=since_commit,
+                         error=str(e))
 
         return changes
 
     def _get_changes_since_state(self, old_state: RepositoryState,
-                                current_state: RepositoryState) -> List[FileChange]:
+                                 current_state: RepositoryState) -> List[FileChange]:
         """Compare two repository states to find changes"""
         changes = []
 
@@ -206,9 +206,9 @@ class GitMonitor:
                     changes.append(change)
 
         logger.debug("Changes detected between states",
-                    added=len([c for c in changes if c.change_type == ChangeType.ADDED]),
-                    modified=len([c for c in changes if c.change_type == ChangeType.MODIFIED]),
-                    deleted=len([c for c in changes if c.change_type == ChangeType.DELETED]))
+                     added=len([c for c in changes if c.change_type == ChangeType.ADDED]),
+                     modified=len([c for c in changes if c.change_type == ChangeType.MODIFIED]),
+                     deleted=len([c for c in changes if c.change_type == ChangeType.DELETED]))
 
         return changes
 
