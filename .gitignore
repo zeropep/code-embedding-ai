@@ -305,6 +305,8 @@ dump.rdb
 
 # Development tools
 .pre-commit-config.yaml.bak
+embedding_agent.txt
+project_plan.md
 
 # etc
 /todos
