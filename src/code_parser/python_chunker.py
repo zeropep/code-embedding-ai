@@ -4,9 +4,9 @@ Optimized for semantic splitting of Python code.
 """
 
 import ast
-from typing import List, Optional, Tuple
+from typing import List, Optional
 from dataclasses import dataclass
-from .models import CodeChunk, CodeLanguage, LayerType, ParserConfig
+from .models import CodeChunk, CodeLanguage, LayerType
 
 
 @dataclass
@@ -34,7 +34,7 @@ class PythonChunker:
         self.config = config
 
     def chunk_file(self, content: str, file_path: str,
-                  layer_type: LayerType = LayerType.UNKNOWN) -> List[CodeChunk]:
+                   layer_type: LayerType = LayerType.UNKNOWN) -> List[CodeChunk]:
         """
         Chunk a Python file into semantically meaningful pieces.
 
@@ -52,7 +52,7 @@ class PythonChunker:
             tree = ast.parse(content)
 
             # Extract module-level docstring
-            module_docstring = ast.get_docstring(tree)
+            ast.get_docstring(tree)
 
             # Extract imports section
             if self.config.include_imports:
@@ -83,7 +83,6 @@ class PythonChunker:
     def _extract_imports_chunk(self, tree: ast.Module, lines: List[str],
                                file_path: str) -> Optional[CodeChunk]:
         """Extract import statements as a single chunk"""
-        import_lines = []
         first_import_line = None
         last_import_line = None
 
@@ -114,7 +113,7 @@ class PythonChunker:
         )
 
     def _chunk_class(self, node: ast.ClassDef, lines: List[str],
-                    file_path: str, layer_type: LayerType) -> List[CodeChunk]:
+                     file_path: str, layer_type: LayerType) -> List[CodeChunk]:
         """Chunk a class into appropriate pieces"""
         chunks = []
 
@@ -170,7 +169,7 @@ class PythonChunker:
         return chunks
 
     def _chunk_function(self, node, lines: List[str], file_path: str,
-                       class_name: Optional[str], layer_type: LayerType) -> List[CodeChunk]:
+                        class_name: Optional[str], layer_type: LayerType) -> List[CodeChunk]:
         """Chunk a function/method into appropriate pieces"""
         chunks = []
 
@@ -223,7 +222,7 @@ class PythonChunker:
         return chunks
 
     def _split_large_function(self, node, lines: List[str], file_path: str,
-                             class_name: Optional[str], layer_type: LayerType) -> List[CodeChunk]:
+                              class_name: Optional[str], layer_type: LayerType) -> List[CodeChunk]:
         """Split a large function into logical blocks"""
         chunks = []
 
@@ -299,7 +298,7 @@ class PythonChunker:
         for chunk in chunks:
             # Don't merge different types
             if (current_group and
-                current_group[0].metadata.get('type') != chunk.metadata.get('type')):
+                    current_group[0].metadata.get('type') != chunk.metadata.get('type')):
                 if current_tokens >= self.config.min_tokens:
                     merged.append(self._combine_chunks(current_group))
                 else:
@@ -394,7 +393,7 @@ class PythonChunker:
         return self._get_node_end_line(node, lines)
 
     def _fallback_chunking(self, content: str, file_path: str,
-                          layer_type: LayerType) -> List[CodeChunk]:
+                           layer_type: LayerType) -> List[CodeChunk]:
         """Fallback to simple line-based chunking when AST fails"""
         chunks = []
         lines = content.split('\n')

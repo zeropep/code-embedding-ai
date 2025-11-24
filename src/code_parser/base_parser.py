@@ -15,17 +15,14 @@ class BaseParser(ABC):
     @abstractmethod
     def parse_file(self, file_path: Path) -> Optional[ParsedFile]:
         """Parse a single file and return ParsedFile object"""
-        pass
 
     @abstractmethod
     def can_parse(self, file_path: Path) -> bool:
         """Check if this parser can handle the given file"""
-        pass
 
     @abstractmethod
     def get_language(self) -> CodeLanguage:
         """Return the language this parser handles"""
-        pass
 
     def calculate_file_hash(self, file_path: Path) -> str:
         """Calculate SHA-256 hash of file content"""
@@ -58,7 +55,7 @@ class BaseParser(ABC):
             line_tokens = len(line) // 4  # Rough estimation
 
             if (current_tokens + line_tokens > self.config.max_tokens and
-                current_tokens >= self.config.min_tokens):
+                    current_tokens >= self.config.min_tokens):
                 # Create chunk
                 chunk_content = '\n'.join(current_chunk)
                 if chunk_content.strip():
@@ -75,7 +72,7 @@ class BaseParser(ABC):
                 # Start new chunk with overlap
                 overlap_lines = self._get_overlap_lines(current_chunk)
                 current_chunk = overlap_lines + [line]
-                current_tokens = sum(len(l) // 4 for l in current_chunk)
+                current_tokens = sum(len(ln) // 4 for ln in current_chunk)
                 start_line = i - len(overlap_lines) + 1
             else:
                 current_chunk.append(line)

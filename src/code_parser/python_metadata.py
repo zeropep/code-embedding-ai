@@ -5,8 +5,6 @@ complexity metrics, and code style information.
 """
 
 import ast
-import re
-import sys
 from typing import Dict, List, Optional, Any, Set
 from dataclasses import dataclass
 from pathlib import Path
@@ -304,10 +302,11 @@ class PythonMetadataExtractor:
         metrics = ComplexityMetrics(
             cyclomatic_complexity=self._calculate_cyclomatic_complexity(tree),
             cognitive_complexity=self._calculate_cognitive_complexity(tree),
-            lines_of_code=len([l for l in lines if l.strip() and not l.strip().startswith('#')]),
-            lines_of_comments=len([l for l in lines if l.strip().startswith('#')]),
-            blank_lines=len([l for l in lines if not l.strip()]),
-            number_of_functions=sum(1 for _ in ast.walk(tree) if isinstance(_, (ast.FunctionDef, ast.AsyncFunctionDef))),
+            lines_of_code=len([ln for ln in lines if ln.strip() and not ln.strip().startswith('#')]),
+            lines_of_comments=len([ln for ln in lines if ln.strip().startswith('#')]),
+            blank_lines=len([ln for ln in lines if not ln.strip()]),
+            number_of_functions=sum(1 for _ in ast.walk(tree) if isinstance(
+                _, (ast.FunctionDef, ast.AsyncFunctionDef))),
             number_of_classes=sum(1 for _ in ast.walk(tree) if isinstance(_, ast.ClassDef)),
             max_nesting_depth=self._calculate_max_nesting(tree)
         )
@@ -425,9 +424,9 @@ class PythonMetadataExtractor:
         return {
             'issues_count': len(issues),
             'issues': issues[:10],  # Limit to first 10 issues
-            'max_line_length': max(len(l) for l in lines) if lines else 0,
-            'uses_tabs': any('\t' in l for l in lines),
-            'uses_spaces': any('    ' in l for l in lines)
+            'max_line_length': max(len(ln) for ln in lines) if lines else 0,
+            'uses_tabs': any('\t' in ln for ln in lines),
+            'uses_spaces': any('    ' in ln for ln in lines)
         }
 
     def _get_decorator_name(self, node) -> str:

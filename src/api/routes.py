@@ -1,12 +1,15 @@
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Query
-from fastapi.responses import JSONResponse
-from typing import List, Dict, Any, Optional
-import asyncio
+from typing import Dict, Any, Optional
 import uuid
 import time
 import structlog
 
-from .models import *
+from .models import (
+    HealthCheckResponse, SearchResponse, SearchRequest, SearchResult,
+    RequestStatus, SimilarCodeRequest, ProcessRepositoryResponse,
+    ProcessRepositoryRequest, ProcessingMode, BatchProcessRequest,
+    SystemStatusResponse, MetricsResponse, BatchDeleteRequest
+)
 from .dependencies import get_embedding_pipeline, get_update_service, get_vector_store
 from ..embeddings.embedding_pipeline import EmbeddingPipeline
 from ..updates.update_service import UpdateService
@@ -91,8 +94,8 @@ async def semantic_search(
         start_time = time.time()
 
         logger.info("Semantic search request",
-                   query=request.query,
-                   top_k=request.top_k)
+                    query=request.query,
+                    top_k=request.top_k)
 
         # Generate embedding for query
         await pipeline.embedding_service.start()
@@ -317,9 +320,9 @@ async def process_repository(
         request_id = str(uuid.uuid4())
 
         logger.info("Repository processing request",
-                   request_id=request_id,
-                   repo_path=request.repo_path,
-                   mode=request.mode)
+                    request_id=request_id,
+                    repo_path=request.repo_path,
+                    mode=request.mode)
 
         if request.mode == ProcessingMode.FULL:
             # Process entire repository
@@ -336,7 +339,7 @@ async def process_repository(
 
         return ProcessRepositoryResponse(
             status=RequestStatus.SUCCESS,
-            message=f"Repository processed successfully",
+            message="Repository processed successfully",
             request_id=request_id,
             processing_summary=result.get("processing_summary"),
             parsing_stats=result.get("parsing_stats"),
@@ -359,8 +362,8 @@ async def process_files(
         request_id = str(uuid.uuid4())
 
         logger.info("File processing request",
-                   request_id=request_id,
-                   file_count=len(request.file_paths))
+                    request_id=request_id,
+                    file_count=len(request.file_paths))
 
         result = await pipeline.process_files(request.file_paths)
 
@@ -369,7 +372,7 @@ async def process_files(
 
         return ProcessRepositoryResponse(
             status=RequestStatus.SUCCESS,
-            message=f"Files processed successfully",
+            message="Files processed successfully",
             request_id=request_id,
             processing_summary=result.get("processing_summary"),
             parsing_stats=result.get("parsing_stats"),

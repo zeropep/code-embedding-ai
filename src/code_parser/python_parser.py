@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 from typing import List, Optional, Dict, Any, Set
 from .base_parser import BaseParser
-from .models import ParsedFile, CodeChunk, CodeLanguage, LayerType, ParserConfig
+from .models import ParsedFile, CodeChunk, CodeLanguage, LayerType
 
 
 class PythonParser(BaseParser):
@@ -83,7 +83,7 @@ class PythonParser(BaseParser):
             file_layer = self._determine_layer_from_path(file_path)
 
             # Extract module-level docstring
-            module_docstring = ast.get_docstring(tree)
+            ast.get_docstring(tree)
 
             # Process top-level nodes
             for node in ast.iter_child_nodes(tree):
@@ -195,8 +195,8 @@ class PythonParser(BaseParser):
         return LayerType.UNKNOWN
 
     def _extract_class_chunks(self, node: ast.ClassDef, lines: List[str],
-                             file_path: str, imports: Dict, framework: Optional[str],
-                             file_layer: LayerType) -> List[CodeChunk]:
+                              file_path: str, imports: Dict, framework: Optional[str],
+                              file_layer: LayerType) -> List[CodeChunk]:
         """Extract class and its methods as chunks"""
         chunks = []
 
@@ -250,9 +250,9 @@ class PythonParser(BaseParser):
         return chunks
 
     def _extract_function_chunk(self, node, lines: List[str],
-                               file_path: str, class_name: Optional[str],
-                               imports: Dict, framework: Optional[str],
-                               parent_layer: LayerType) -> Optional[CodeChunk]:
+                                file_path: str, class_name: Optional[str],
+                                imports: Dict, framework: Optional[str],
+                                parent_layer: LayerType) -> Optional[CodeChunk]:
         """Extract function/method as a chunk"""
         start_line = node.lineno
         end_line = self._get_node_end_line(node, lines)
@@ -419,10 +419,10 @@ class PythonParser(BaseParser):
         return len(lines)
 
     def _determine_class_layer(self, node: ast.ClassDef, content: str,
-                              framework: Optional[str], file_layer: LayerType) -> LayerType:
+                               framework: Optional[str], file_layer: LayerType) -> LayerType:
         """Determine layer type for a class"""
         class_name = node.name.lower()
-        content_lower = content.lower()
+        content.lower()
         decorators = self._extract_decorators(node)
         bases = [self._get_base_name(base).lower() for base in node.bases]
 

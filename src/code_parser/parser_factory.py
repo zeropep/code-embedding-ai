@@ -99,7 +99,7 @@ class ParserFactory:
         return parser.parse_file(file_path)
 
     def parse_directory(self, directory_path: Path,
-                       recursive: bool = True) -> List[ParsedFile]:
+                        recursive: bool = True) -> List[ParsedFile]:
         """Parse all supported files in a directory"""
         parsed_files = []
 

@@ -3,8 +3,6 @@ Python Framework Detector for Django, Flask, and FastAPI.
 Detects framework-specific patterns and layer types.
 """
 
-import ast
-import re
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 from dataclasses import dataclass
@@ -225,7 +223,7 @@ class PythonFrameworkDetector:
         return result
 
     def detect_layer_from_class(self, class_name: str, base_classes: List[str],
-                               decorators: List[str], framework: PythonFramework) -> LayerType:
+                                decorators: List[str], framework: PythonFramework) -> LayerType:
         """Detect layer type from class definition"""
         # Check base classes
         base_class_layers = self._get_base_class_layers(framework)
@@ -273,7 +271,7 @@ class PythonFrameworkDetector:
         return LayerType.UNKNOWN
 
     def detect_layer_from_function(self, func_name: str, decorators: List[str],
-                                  framework: PythonFramework) -> LayerType:
+                                   framework: PythonFramework) -> LayerType:
         """Detect layer type from function definition"""
         decorator_layers = self._get_decorator_layers(framework)
 
@@ -323,8 +321,8 @@ class PythonFrameworkDetector:
         return LayerType.UNKNOWN
 
     def detect(self, file_path: str, content: str, imports: Dict[str, Set[str]],
-              class_info: Optional[Dict] = None,
-              function_info: Optional[Dict] = None) -> FrameworkDetectionResult:
+               class_info: Optional[Dict] = None,
+               function_info: Optional[Dict] = None) -> FrameworkDetectionResult:
         """
         Comprehensive detection of framework and layer type.
 

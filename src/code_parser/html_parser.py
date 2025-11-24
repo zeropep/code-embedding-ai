@@ -1,7 +1,6 @@
-import re
 from pathlib import Path
 from typing import List, Optional
-from bs4 import BeautifulSoup, Comment
+from bs4 import BeautifulSoup
 from .base_parser import BaseParser
 from .models import ParsedFile, CodeChunk, CodeLanguage, LayerType
 
@@ -78,7 +77,7 @@ class HTMLParser(BaseParser):
         return chunks
 
     def _extract_thymeleaf_fragments(self, soup: BeautifulSoup, lines: List[str],
-                                   file_path: str) -> List[CodeChunk]:
+                                     file_path: str) -> List[CodeChunk]:
         """Extract Thymeleaf fragments (th:fragment)"""
         chunks = []
 
@@ -177,7 +176,7 @@ class HTMLParser(BaseParser):
         return chunks
 
     def _extract_thymeleaf_sections(self, soup: BeautifulSoup, lines: List[str],
-                                  file_path: str) -> List[CodeChunk]:
+                                    file_path: str) -> List[CodeChunk]:
         """Extract sections with Thymeleaf logic (loops, conditionals)"""
         chunks = []
 

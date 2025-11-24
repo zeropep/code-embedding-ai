@@ -23,8 +23,8 @@ class CodeParser:
         self.parser_factory = ParserFactory(config)
 
         logger.info("CodeParser initialized",
-                   max_workers=max_workers,
-                   supported_extensions=config.supported_extensions)
+                    max_workers=max_workers,
+                    supported_extensions=config.supported_extensions)
 
     def parse_repository(self, repo_path: str) -> List[ParsedFile]:
         """Parse entire repository"""
@@ -70,7 +70,7 @@ class CodeParser:
 
         if not self.parser_factory.can_parse_file(file_path_obj):
             logger.warning("File type not supported", path=file_path,
-                          suffix=file_path_obj.suffix)
+                           suffix=file_path_obj.suffix)
             return None
 
         logger.debug("Parsing single file", path=file_path)
@@ -108,13 +108,13 @@ class CodeParser:
                     if parsed_file:
                         parsed_files.append(parsed_file)
                         logger.debug("File parsed successfully",
-                                   path=str(file_path),
-                                   chunks=len(parsed_file.chunks))
+                                     path=str(file_path),
+                                     chunks=len(parsed_file.chunks))
                     else:
                         logger.warning("Failed to parse file", path=str(file_path))
                 except Exception as e:
                     logger.error("Error parsing file",
-                               path=str(file_path), error=str(e))
+                                 path=str(file_path), error=str(e))
 
         return parsed_files
 
@@ -188,13 +188,13 @@ class CodeParser:
                     chunks.append(chunk)
                 else:
                     logger.debug("Chunk filtered by size",
-                               file=chunk.file_path,
-                               tokens=chunk.token_count,
-                               min_tokens=self.config.min_tokens,
-                               max_tokens=self.config.max_tokens)
+                                 file=chunk.file_path,
+                                 tokens=chunk.token_count,
+                                 min_tokens=self.config.min_tokens,
+                                 max_tokens=self.config.max_tokens)
 
         logger.info("Chunks prepared for embedding",
-                   total_chunks=len(chunks))
+                    total_chunks=len(chunks))
         return chunks
 
     async def parse_repository_async(self, repo_path: str) -> List[ParsedFile]:

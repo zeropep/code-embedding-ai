@@ -1,6 +1,6 @@
 import re
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 import javalang
 from .base_parser import BaseParser
 from .models import ParsedFile, CodeChunk, CodeLanguage, LayerType
@@ -56,7 +56,7 @@ class JavaParser(BaseParser):
 
             # Extract package and imports info
             package_name = tree.package.name if tree.package else ""
-            imports = [imp.path for imp in tree.imports] if tree.imports else []
+            [imp.path for imp in tree.imports] if tree.imports else []
 
             # Extract classes and their methods
             for path, node in tree.filter(javalang.tree.ClassDeclaration):
@@ -86,7 +86,7 @@ class JavaParser(BaseParser):
         return chunks
 
     def _extract_class_chunk(self, node: javalang.tree.ClassDeclaration,
-                           lines: List[str], file_path: str, package_name: str) -> Optional[CodeChunk]:
+                             lines: List[str], file_path: str, package_name: str) -> Optional[CodeChunk]:
         """Extract class declaration and fields"""
         if not hasattr(node, 'position') or not node.position:
             return None
@@ -120,8 +120,8 @@ class JavaParser(BaseParser):
         )
 
     def _extract_method_chunk(self, node: javalang.tree.MethodDeclaration,
-                            lines: List[str], file_path: str, class_name: str,
-                            package_name: str) -> Optional[CodeChunk]:
+                              lines: List[str], file_path: str, class_name: str,
+                              package_name: str) -> Optional[CodeChunk]:
         """Extract method implementation"""
         if not hasattr(node, 'position') or not node.position:
             return None
@@ -152,7 +152,7 @@ class JavaParser(BaseParser):
         )
 
     def _extract_interface_chunk(self, node: javalang.tree.InterfaceDeclaration,
-                               lines: List[str], file_path: str, package_name: str) -> Optional[CodeChunk]:
+                                 lines: List[str], file_path: str, package_name: str) -> Optional[CodeChunk]:
         """Extract interface declaration"""
         if not hasattr(node, 'position') or not node.position:
             return None
@@ -228,40 +228,40 @@ class JavaParser(BaseParser):
         # Controller layer
         if ('controller' in name_lower or
             '@controller' in content_lower or
-            '@restcontroller' in content_lower):
+                '@restcontroller' in content_lower):
             return LayerType.CONTROLLER
 
         # Service layer
         if ('service' in name_lower or
-            '@service' in content_lower):
+                '@service' in content_lower):
             return LayerType.SERVICE
 
         # Repository layer
         if ('repository' in name_lower or
             'dao' in name_lower or
-            '@repository' in content_lower):
+                '@repository' in content_lower):
             return LayerType.REPOSITORY
 
         # Entity layer
         if ('entity' in name_lower or
             'model' in name_lower or
-            '@entity' in content_lower):
+                '@entity' in content_lower):
             return LayerType.ENTITY
 
         # Configuration
         if ('config' in name_lower or
             'configuration' in name_lower or
-            '@configuration' in content_lower):
+                '@configuration' in content_lower):
             return LayerType.CONFIG
 
         # Test
         if ('test' in name_lower or
-            '@test' in content_lower):
+                '@test' in content_lower):
             return LayerType.TEST
 
         # Utility
         if ('util' in name_lower or
-            'helper' in name_lower):
+                'helper' in name_lower):
             return LayerType.UTIL
 
         return LayerType.UNKNOWN

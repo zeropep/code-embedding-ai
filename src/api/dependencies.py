@@ -103,7 +103,8 @@ class ServiceManager:
             max_tokens=int(os.getenv("CHUNK_MAX_TOKENS", "500")),
             overlap_tokens=int(os.getenv("CHUNK_OVERLAP_TOKENS", "20")),
             include_comments=os.getenv("INCLUDE_COMMENTS", "false").lower() == "true",
-            supported_extensions=os.getenv("SUPPORTED_EXTENSIONS", ".java,.kt,.html,.xml,.yml,.yaml,.properties").split(",")
+            supported_extensions=os.getenv(
+                "SUPPORTED_EXTENSIONS", ".java,.kt,.html,.xml,.yml,.yaml,.properties").split(",")
         )
 
     def _create_security_config(self) -> SecurityConfig:
