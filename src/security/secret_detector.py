@@ -6,6 +6,7 @@ from pathlib import Path
 import structlog
 
 from .models import DetectedSecret, SecretType, SecurityConfig
+from .python_patterns import PythonSecurityPatterns
 
 
 logger = structlog.get_logger(__name__)
@@ -20,6 +21,7 @@ class SecretDetector:
 
         self.config = config
         self._init_patterns()
+        self._init_python_patterns()
 
     def _init_patterns(self):
         """Initialize detection patterns"""
@@ -266,3 +268,127 @@ class SecretDetector:
                 deduplicated.append(secret)
 
         return deduplicated
+
+    def _init_python_patterns(self):
+        """Initialize Python-specific detection patterns"""
+        self.python_patterns = PythonSecurityPatterns.compile_patterns(
+            PythonSecurityPatterns.get_all_patterns()
+        )
+        self.env_patterns = PythonSecurityPatterns.compile_patterns(
+            PythonSecurityPatterns.get_env_patterns()
+        )
+
+    def detect_python_secrets(self, content: str, file_path: str = "",
+                             framework: Optional[str] = None) -> List[DetectedSecret]:
+        """Detect secrets in Python code with framework-specific patterns"""
+        detected = []
+
+        if not self.config.enabled:
+            return detected
+
+        # Skip whitelisted files
+        if self._is_whitelisted_file(file_path):
+            logger.debug("File is whitelisted", file_path=file_path)
+            return detected
+
+        # Determine which patterns to use
+        if file_path.endswith('.env') or '.env.' in file_path:
+            patterns = self.env_patterns
+        elif framework:
+            patterns = PythonSecurityPatterns.compile_patterns(
+                PythonSecurityPatterns.get_patterns_for_framework(framework)
+            )
+        else:
+            patterns = self.python_patterns
+
+        lines = content.split('\n')
+
+        for line_num, line in enumerate(lines, 1):
+            # Skip comments if not configured to scan them
+            if not self.config.scan_comments and self._is_python_comment(line):
+                continue
+
+            detected.extend(self._scan_line_python(line, line_num, file_path, patterns))
+
+        # Also run standard detection
+        standard_secrets = self.detect_secrets(content, file_path)
+        detected.extend(standard_secrets)
+
+        # Remove duplicates and filter by confidence
+        detected = self._filter_and_deduplicate(detected)
+
+        logger.debug("Python secrets detected", count=len(detected), file_path=file_path)
+        return detected
+
+    def _scan_line_python(self, line: str, line_num: int, file_path: str,
+                         patterns: Dict) -> List[DetectedSecret]:
+        """Scan a single line for Python-specific secrets"""
+        secrets = []
+
+        for secret_type, pattern_list in patterns.items():
+            for compiled_pattern, pattern_name, base_confidence in pattern_list:
+                matches = compiled_pattern.finditer(line)
+
+                for match in matches:
+                    # Check if it's a whitelisted pattern
+                    if self._is_whitelisted_content(match.group()):
+                        continue
+
+                    # Extract the secret content
+                    if match.groups():
+                        secret_content = match.group(1)
+                    else:
+                        secret_content = match.group()
+
+                    # Skip very short matches
+                    if len(secret_content) < 4:
+                        continue
+
+                    # Calculate final confidence
+                    confidence = self._adjust_python_confidence(
+                        secret_content, secret_type, base_confidence, file_path
+                    )
+
+                    if confidence >= self.config.sensitivity_threshold:
+                        secret = DetectedSecret(
+                            content=secret_content,
+                            secret_type=secret_type,
+                            confidence=confidence,
+                            start_position=match.start(),
+                            end_position=match.end(),
+                            line_number=line_num,
+                            pattern_name=pattern_name,
+                            context=line.strip()
+                        )
+                        secrets.append(secret)
+
+        return secrets
+
+    def _adjust_python_confidence(self, content: str, secret_type: SecretType,
+                                  base_confidence: float, file_path: str) -> float:
+        """Adjust confidence based on Python-specific heuristics"""
+        confidence = base_confidence
+
+        # Increase confidence for production-like files
+        if 'settings' in file_path.lower() or 'config' in file_path.lower():
+            confidence = min(confidence + 0.1, 1.0)
+
+        # Decrease confidence for test files
+        if 'test' in file_path.lower() or 'mock' in file_path.lower():
+            confidence = max(confidence - 0.2, 0.0)
+
+        # Decrease for example/sample values
+        if any(x in content.lower() for x in ['example', 'sample', 'placeholder', 'xxx', 'your-']):
+            confidence = max(confidence - 0.3, 0.0)
+
+        # Increase for high-entropy content
+        entropy = self._calculate_entropy(content)
+        if entropy > 4.5:
+            confidence = min(confidence + 0.1, 1.0)
+
+        return confidence
+
+    def _is_python_comment(self, line: str) -> bool:
+        """Check if line is a Python comment"""
+        stripped = line.strip()
+        return stripped.startswith('#') or stripped.startswith('"""') or stripped.startswith("'''")

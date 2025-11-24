@@ -3,6 +3,7 @@ from typing import List, Optional, Dict
 from .base_parser import BaseParser
 from .java_parser import JavaParser
 from .html_parser import HTMLParser
+from .python_parser import PythonParser
 from .models import ParserConfig, ParsedFile, CodeLanguage
 
 
@@ -59,6 +60,7 @@ class ParserFactory:
         self._parsers = [
             JavaParser(self.config),
             HTMLParser(self.config),
+            PythonParser(self.config),
         ]
 
     def get_parser(self, file_path: Path) -> BaseParser:
@@ -123,9 +125,28 @@ class ParserFactory:
     def _should_ignore_file(self, file_path: Path) -> bool:
         """Check if file should be ignored based on patterns"""
         ignore_patterns = [
+            # Java/Kotlin
             "*.class", "*.jar", "*.war",
             "target/", "build/", ".git/",
-            "node_modules/", ".idea/", "*.log"
+            # JavaScript/Node
+            "node_modules/",
+            # IDE
+            ".idea/", ".vscode/",
+            # Logs
+            "*.log",
+            # Python virtual environments
+            "venv/", ".venv/", "env/", ".env/",
+            "virtualenv/", ".virtualenv/",
+            # Python cache and build
+            "__pycache__/", "*.pyc", "*.pyo", "*.pyd",
+            ".pytest_cache/", ".mypy_cache/", ".ruff_cache/",
+            "*.egg-info/", "dist/", "eggs/", ".eggs/",
+            # Python package directories (site-packages)
+            "site-packages/", "lib/python",
+            # Jupyter
+            ".ipynb_checkpoints/",
+            # Coverage
+            "htmlcov/", ".coverage",
         ]
 
         file_str = str(file_path).replace('\\', '/')
@@ -151,4 +172,33 @@ class ParserFactory:
         return {
             "total_parsers": len(self._parsers),
             "supported_extensions": len(self.config.supported_extensions)
+        }
+
+    def is_python_project(self, directory_path: Path) -> bool:
+        """Check if directory is a Python project"""
+        python_indicators = [
+            'setup.py', 'pyproject.toml', 'setup.cfg',
+            'requirements.txt', 'Pipfile', 'poetry.lock',
+            'manage.py',  # Django
+            'app.py',     # Flask
+            'main.py',    # FastAPI
+        ]
+
+        for indicator in python_indicators:
+            if (directory_path / indicator).exists():
+                return True
+
+        # Check for __init__.py (package structure)
+        if list(directory_path.glob('**/__init__.py')):
+            return True
+
+        return False
+
+    def detect_project_type(self, directory_path: Path) -> Dict[str, bool]:
+        """Detect types of projects in directory"""
+        return {
+            'python': self.is_python_project(directory_path),
+            'java': any(directory_path.glob('**/pom.xml')) or any(directory_path.glob('**/build.gradle')),
+            'kotlin': any(directory_path.glob('**/*.kt')),
+            'web': any(directory_path.glob('**/*.html')) or any(directory_path.glob('**/package.json')),
         }

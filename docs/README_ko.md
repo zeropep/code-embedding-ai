@@ -4,7 +4,7 @@ Spring Boot + Thymeleaf 코드베이스를 처리하고, 시맨틱 임베딩을 
 
 ## 주요 기능
 
-- **다중 언어 코드 파싱**: AST 기반 분석을 통한 Java, Kotlin, HTML/Thymeleaf 지원
+- **다중 언어 코드 파싱**: AST 기반 분석을 통한 Java, Kotlin, HTML/Thymeleaf, Python 지원
 - **지능형 청킹**: 설정 가능한 토큰 제한과 오버랩을 가진 시맨틱 코드 분할
 - **보안 스캐닝**: 시크릿, 자격증명, 민감 데이터의 자동 탐지 및 마스킹
 - **벡터 임베딩**: jina-embeddings-v2-base-code를 사용한 고품질 코드 임베딩
@@ -84,9 +84,10 @@ result = await pipeline.process_repository("/path/to/repo")
 파이프라인은 여러 핵심 구성 요소로 이루어져 있습니다:
 
 ### 1. 코드 파서 (`src/code_parser/`)
-- **언어 지원**: Java, Kotlin, HTML/Thymeleaf
+- **언어 지원**: Java, Kotlin, HTML/Thymeleaf, Python
 - **AST 분석**: 메서드/클래스 추출, 레이어 감지
 - **청킹 전략**: 설정 가능한 매개변수로 시맨틱 분할
+- **Python 프레임워크**: Django, Flask, FastAPI 감지 및 레이어 분류
 
 ### 2. 보안 스캐너 (`src/security/`)
 - **시크릿 탐지**: 패스워드, API 키, 토큰, 데이터베이스 URL
@@ -146,7 +147,7 @@ parser:
   min_tokens: 50
   max_tokens: 500
   overlap_tokens: 50
-  supported_extensions: [".java", ".kt", ".html"]
+  supported_extensions: [".java", ".kt", ".html", ".py"]
 
 security:
   enabled: true
@@ -406,6 +407,7 @@ python src/cli.py process /path/to/repo
 ## 추가 리소스
 
 - [API 문서](api_documentation.md) - 완전한 API 참조
+- [Python 지원 가이드](python_support.md) - Python/Django/Flask/FastAPI 지원
 - [아키텍처 가이드](architecture.md) - 상세한 시스템 설계
 - [보안 가이드](security.md) - 보안 기능 및 모범 사례
 - [성능 튜닝](performance.md) - 최적화 가이드

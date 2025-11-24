@@ -10,9 +10,11 @@ class CodeLanguage(Enum):
     XML = "xml"
     YAML = "yaml"
     PROPERTIES = "properties"
+    PYTHON = "python"
 
 
 class LayerType(Enum):
+    # Common layers
     CONTROLLER = "Controller"
     SERVICE = "Service"
     REPOSITORY = "Repository"
@@ -22,6 +24,18 @@ class LayerType(Enum):
     TEST = "Test"
     TEMPLATE = "Template"
     UNKNOWN = "Unknown"
+    # Python-specific layers
+    VIEW = "View"                    # Django views
+    MIDDLEWARE = "Middleware"        # Django/Flask middleware
+    SERIALIZER = "Serializer"        # DRF serializers
+    ROUTER = "Router"                # FastAPI routers
+    SCHEMA = "Schema"                # Pydantic models/schemas
+    FORM = "Form"                    # Django forms
+    ADMIN = "Admin"                  # Django admin
+    COMMAND = "Command"              # Django management commands
+    TASK = "Task"                    # Celery tasks
+    SIGNAL = "Signal"                # Django signals
+    MIGRATION = "Migration"          # Database migrations
 
 
 @dataclass
@@ -99,5 +113,6 @@ class ParserConfig:
         if self.supported_extensions is None:
             self.supported_extensions = [
                 ".java", ".kt", ".kts", ".html", ".htm",
-                ".xml", ".yml", ".yaml", ".properties"
+                ".xml", ".yml", ".yaml", ".properties",
+                ".py", ".pyw"  # Python files
             ]

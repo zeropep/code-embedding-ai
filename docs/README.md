@@ -4,7 +4,7 @@ A comprehensive AI-powered code analysis pipeline that processes Spring Boot + T
 
 ## Features
 
-- **Multi-language Code Parsing**: Support for Java, Kotlin, HTML/Thymeleaf with AST-based analysis
+- **Multi-language Code Parsing**: Support for Java, Kotlin, HTML/Thymeleaf, and Python with AST-based analysis
 - **Intelligent Chunking**: Semantic code splitting with configurable token limits and overlap
 - **Security Scanning**: Automated detection and masking of secrets, credentials, and sensitive data
 - **Vector Embeddings**: High-quality code embeddings using jina-embeddings-v2-base-code
@@ -84,9 +84,10 @@ result = await pipeline.process_repository("/path/to/repo")
 The pipeline consists of several key components:
 
 ### 1. Code Parser (`src/code_parser/`)
-- **Language Support**: Java, Kotlin, HTML/Thymeleaf
+- **Language Support**: Java, Kotlin, HTML/Thymeleaf, Python
 - **AST Analysis**: Method/class extraction, layer detection
 - **Chunking Strategy**: Semantic splitting with configurable parameters
+- **Python Frameworks**: Django, Flask, FastAPI detection and layer classification
 
 ### 2. Security Scanner (`src/security/`)
 - **Secret Detection**: Passwords, API keys, tokens, database URLs
@@ -146,7 +147,7 @@ parser:
   min_tokens: 50
   max_tokens: 500
   overlap_tokens: 50
-  supported_extensions: [".java", ".kt", ".html"]
+  supported_extensions: [".java", ".kt", ".html", ".py"]
 
 security:
   enabled: true
