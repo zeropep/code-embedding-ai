@@ -129,7 +129,8 @@ class PerformanceMetrics:
                 "embedding_errors": self.embedding_errors,
                 "database_errors": self.database_errors,
                 "security_errors": self.security_errors,
-                "total_errors": self.parsing_errors + self.embedding_errors + self.database_errors + self.security_errors
+                "total_errors": (self.parsing_errors + self.embedding_errors +
+                                 self.database_errors + self.security_errors)
             },
             "resources": {
                 "memory_usage_mb": self.memory_usage_mb,

@@ -1,7 +1,6 @@
 import time
 import psutil
-import threading
-from typing import Dict, Any, Optional, List, Callable
+from typing import Dict, Any, Optional, List
 from collections import defaultdict, deque
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
@@ -69,7 +68,7 @@ class AdvancedMetricsCollector(BaseMetricsCollector):
 
             except asyncio.CancelledError:
                 break
-            except Exception as e:
+            except Exception:
                 # Log error but continue collection
                 pass
 
@@ -129,10 +128,10 @@ class AdvancedMetricsCollector(BaseMetricsCollector):
                         metric_type=MetricType.GAUGE,
                         labels={"component": "system"}
                     ))
-            except:
+            except Exception:
                 pass
 
-        except Exception as e:
+        except Exception:
             # Log error but don't fail
             pass
 

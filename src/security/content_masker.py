@@ -69,7 +69,7 @@ class ContentMasker:
         }
 
     def mask_content(self, content: str, detected_secrets: List[DetectedSecret],
-                    file_path: str = "") -> MaskingResult:
+                     file_path: str = "") -> MaskingResult:
         """Mask all detected secrets in content"""
         if not self.config.enabled or not detected_secrets:
             return MaskingResult(
@@ -86,8 +86,8 @@ class ContentMasker:
 
         # Sort secrets by position (reverse order to maintain positions)
         sorted_secrets = sorted(detected_secrets,
-                              key=lambda x: (x.line_number, x.start_position),
-                              reverse=True)
+                                key=lambda x: (x.line_number, x.start_position),
+                                reverse=True)
 
         lines = masked_content.split('\n')
 
@@ -103,9 +103,9 @@ class ContentMasker:
 
             except Exception as e:
                 logger.warning("Failed to mask secret",
-                             error=str(e),
-                             secret_type=secret.secret_type.value,
-                             line=secret.line_number)
+                               error=str(e),
+                               secret_type=secret.secret_type.value,
+                               line=secret.line_number)
 
         masked_content = '\n'.join(lines)
 
@@ -113,10 +113,10 @@ class ContentMasker:
         sensitivity_level = self._calculate_sensitivity_level(processed_secrets)
 
         logger.debug("Content masking completed",
-                   file_path=file_path,
-                   secrets_detected=len(detected_secrets),
-                   secrets_masked=masked_count,
-                   sensitivity=sensitivity_level.value)
+                     file_path=file_path,
+                     secrets_detected=len(detected_secrets),
+                     secrets_masked=masked_count,
+                     sensitivity=sensitivity_level.value)
 
         return MaskingResult(
             original_content=content,
@@ -141,13 +141,13 @@ class ContentMasker:
         return self._apply_standard_mask(line, secret, rule)
 
     def _apply_standard_mask(self, line: str, secret: DetectedSecret,
-                           rule: Dict) -> Tuple[str, bool]:
+                             rule: Dict) -> Tuple[str, bool]:
         """Apply standard masking rules"""
         placeholder = rule['placeholder']
 
         # Find the secret in the line
-        secret_start = secret.start_position
-        secret_end = secret.end_position
+        secret.start_position
+        secret.end_position
 
         # Adjust positions relative to the line
         line_start = secret.context.find(secret.content)
@@ -174,8 +174,8 @@ class ContentMasker:
             else:
                 # Not quoted or mismatched quotes, add quotes to placeholder
                 masked_line = (line[:line_start] +
-                             f'"{placeholder}"' +
-                             line[line_end:])
+                               f'"{placeholder}"' +
+                               line[line_end:])
         else:
             # Simple replacement
             masked_line = line[:line_start] + placeholder + line[line_end:]
@@ -197,7 +197,8 @@ class ContentMasker:
     def _mask_credentials(self, line: str, secret: DetectedSecret) -> Tuple[str, bool]:
         """Custom masking for username/password pairs"""
         # Pattern to find username/password pairs
-        cred_pattern = r'((?i)(username|user)\s*[=:]\s*["\'])[^"\']+(["\'])\s*[,;]?\s*((?i)(password|pwd)\s*[=:]\s*["\'])[^"\']+(["\'])'
+        cred_pattern = (r'((?i)(username|user)\s*[=:]\s*["\'])[^"\']+'
+                        r'(["\'])\s*[,;]?\s*((?i)(password|pwd)\s*[=:]\s*["\'])[^"\']+(["\'])')
 
         def replace_creds(match):
             return f'{match.group(1)}[MASKED_USER]{match.group(3)}, {match.group(4)}[MASKED_PASSWORD]{match.group(6)}'
@@ -240,9 +241,9 @@ class ContentMasker:
         max_confidence = max(secret.confidence for secret in secrets)
 
         high_risk_types = {SecretType.PRIVATE_KEY, SecretType.DATABASE_URL,
-                          SecretType.SECRET_KEY}
+                           SecretType.SECRET_KEY}
         medium_risk_types = {SecretType.API_KEY, SecretType.TOKEN,
-                           SecretType.CREDENTIAL}
+                             SecretType.CREDENTIAL}
 
         # Check for high-risk secret types
         for secret in secrets:

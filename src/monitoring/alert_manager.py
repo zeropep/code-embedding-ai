@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Callable, Any
 from collections import defaultdict, deque
 from dataclasses import dataclass
 
-from .models import Alert, AlertType, LogLevel, MonitoringConfig, PerformanceMetrics
+from .models import Alert, AlertType, LogLevel, MonitoringConfig
 from .metrics_collector import AdvancedMetricsCollector
 
 
@@ -163,7 +163,7 @@ class AlertManager:
 
             except asyncio.CancelledError:
                 break
-            except Exception as e:
+            except Exception:
                 # Log error but continue monitoring
                 pass
 
@@ -188,7 +188,7 @@ class AlertManager:
                     # Check if we should resolve an existing alert
                     await self._resolve_alert_if_exists(rule.name)
 
-            except Exception as e:
+            except Exception:
                 # Log error evaluating rule
                 pass
 
@@ -296,12 +296,12 @@ class AlertManager:
                     await callback(alert)
                 else:
                     callback(alert)
-            except Exception as e:
+            except Exception:
                 # Log notification error
                 pass
 
     def create_manual_alert(self, title: str, message: str, alert_type: AlertType,
-                          severity: LogLevel = LogLevel.WARNING, metadata: Dict[str, Any] = None) -> Alert:
+                            severity: LogLevel = LogLevel.WARNING, metadata: Dict[str, Any] = None) -> Alert:
         """Manually create an alert"""
         alert_id = str(uuid.uuid4())
         alert = Alert(
@@ -338,7 +338,7 @@ class AlertManager:
         return False
 
     def get_active_alerts(self, alert_type: Optional[AlertType] = None,
-                         severity: Optional[LogLevel] = None) -> List[Alert]:
+                          severity: Optional[LogLevel] = None) -> List[Alert]:
         """Get active alerts with optional filtering"""
         alerts = list(self.active_alerts.values())
 

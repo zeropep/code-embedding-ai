@@ -127,17 +127,17 @@ class StructuredLogger:
 
     def debug(self, message: str, **kwargs):
         """Log debug message"""
-        entry = self._create_log_entry(LogLevel.DEBUG, message, **kwargs)
+        self._create_log_entry(LogLevel.DEBUG, message, **kwargs)
         self.logger.debug(message, **kwargs)
 
     def info(self, message: str, **kwargs):
         """Log info message"""
-        entry = self._create_log_entry(LogLevel.INFO, message, **kwargs)
+        self._create_log_entry(LogLevel.INFO, message, **kwargs)
         self.logger.info(message, **kwargs)
 
     def warning(self, message: str, **kwargs):
         """Log warning message"""
-        entry = self._create_log_entry(LogLevel.WARNING, message, **kwargs)
+        self._create_log_entry(LogLevel.WARNING, message, **kwargs)
         self.logger.warning(message, **kwargs)
 
     def error(self, message: str, error: Optional[Exception] = None, **kwargs):
@@ -149,7 +149,7 @@ class StructuredLogger:
                 'stack_trace': traceback.format_exc()
             }
 
-        entry = self._create_log_entry(LogLevel.ERROR, message, **kwargs)
+        self._create_log_entry(LogLevel.ERROR, message, **kwargs)
         self.logger.error(message, exc_info=error, **kwargs)
 
     def critical(self, message: str, error: Optional[Exception] = None, **kwargs):
@@ -161,40 +161,40 @@ class StructuredLogger:
                 'stack_trace': traceback.format_exc()
             }
 
-        entry = self._create_log_entry(LogLevel.CRITICAL, message, **kwargs)
+        self._create_log_entry(LogLevel.CRITICAL, message, **kwargs)
         self.logger.critical(message, exc_info=error, **kwargs)
 
     def log_operation_start(self, operation: str, **kwargs):
         """Log the start of an operation"""
         self.info(f"Operation started: {operation}",
-                 operation=operation,
-                 operation_phase="start",
-                 **kwargs)
+                  operation=operation,
+                  operation_phase="start",
+                  **kwargs)
 
     def log_operation_complete(self, operation: str, duration_seconds: float, **kwargs):
         """Log successful operation completion"""
         self.info(f"Operation completed: {operation}",
-                 operation=operation,
-                 operation_phase="complete",
-                 duration_seconds=duration_seconds,
-                 **kwargs)
+                  operation=operation,
+                  operation_phase="complete",
+                  duration_seconds=duration_seconds,
+                  **kwargs)
 
     def log_operation_error(self, operation: str, error: Exception, **kwargs):
         """Log operation error"""
         self.error(f"Operation failed: {operation}",
-                  error=error,
-                  operation=operation,
-                  operation_phase="error",
-                  **kwargs)
+                   error=error,
+                   operation=operation,
+                   operation_phase="error",
+                   **kwargs)
 
     def log_request_start(self, request_id: str, method: str, path: str, **kwargs):
         """Log HTTP request start"""
         self.info("Request started",
-                 request_id=request_id,
-                 http_method=method,
-                 http_path=path,
-                 request_phase="start",
-                 **kwargs)
+                  request_id=request_id,
+                  http_method=method,
+                  http_path=path,
+                  request_phase="start",
+                  **kwargs)
 
     def log_request_complete(self, request_id: str, status_code: int, duration_ms: float, **kwargs):
         """Log HTTP request completion"""
@@ -202,40 +202,40 @@ class StructuredLogger:
 
         if log_level == LogLevel.ERROR:
             self.error("Request completed with error",
+                       request_id=request_id,
+                       http_status_code=status_code,
+                       response_time_ms=duration_ms,
+                       request_phase="complete",
+                       **kwargs)
+        else:
+            self.info("Request completed",
                       request_id=request_id,
                       http_status_code=status_code,
                       response_time_ms=duration_ms,
                       request_phase="complete",
                       **kwargs)
-        else:
-            self.info("Request completed",
-                     request_id=request_id,
-                     http_status_code=status_code,
-                     response_time_ms=duration_ms,
-                     request_phase="complete",
-                     **kwargs)
 
     def log_performance_metrics(self, metrics: Dict[str, Any], **kwargs):
         """Log performance metrics"""
         self.info("Performance metrics",
-                 metrics=metrics,
-                 log_type="performance",
-                 **kwargs)
+                  metrics=metrics,
+                  log_type="performance",
+                  **kwargs)
 
     def log_security_event(self, event_type: str, details: Dict[str, Any], **kwargs):
         """Log security-related events"""
         self.warning(f"Security event: {event_type}",
-                    security_event_type=event_type,
-                    security_details=details,
-                    log_type="security",
-                    **kwargs)
+                     security_event_type=event_type,
+                     security_details=details,
+                     log_type="security",
+                     **kwargs)
 
     def log_business_event(self, event: str, **kwargs):
         """Log business logic events"""
         self.info(f"Business event: {event}",
-                 business_event=event,
-                 log_type="business",
-                 **kwargs)
+                  business_event=event,
+                  log_type="business",
+                  **kwargs)
 
     def get_recent_logs(self, limit: int = 100, level_filter: Optional[LogLevel] = None) -> List[LogEntry]:
         """Get recent log entries"""

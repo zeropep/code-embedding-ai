@@ -1,9 +1,6 @@
 import re
-import json
-import subprocess
 import math
-from typing import List, Dict, Optional, Tuple
-from pathlib import Path
+from typing import List, Dict, Optional
 import structlog
 
 from .models import DetectedSecret, SecretType, SecurityConfig
@@ -53,7 +50,8 @@ class SecretDetector:
                 r'(?i)(jwt_secret|session_secret)\s*[=:]\s*([^\\s"\']{16,})(?=\\s|$|;|,)',
             ],
             SecretType.CREDENTIAL: [
-                r'(?i)(username|user)\s*[=:]\s*["\']([^"\']{3,})["\']\s*[,;]?\s*(password|pwd)\s*[=:]\s*["\']([^"\']{3,})["\']',
+                (r'(?i)(username|user)\s*[=:]\s*["\']([^"\']{3,})["\']\s*[,;]?\s*'
+                 r'(password|pwd)\s*[=:]\s*["\']([^"\']{3,})["\']'),
                 r'(?i)(credential|auth)\s*[=:]\s*["\']([^"\']{10,})["\']',
             ],
             SecretType.HASH: [
@@ -284,7 +282,7 @@ class SecretDetector:
         )
 
     def detect_python_secrets(self, content: str, file_path: str = "",
-                             framework: Optional[str] = None) -> List[DetectedSecret]:
+                              framework: Optional[str] = None) -> List[DetectedSecret]:
         """Detect secrets in Python code with framework-specific patterns"""
         detected = []
 
@@ -326,7 +324,7 @@ class SecretDetector:
         return detected
 
     def _scan_line_python(self, line: str, line_num: int, file_path: str,
-                         patterns: Dict) -> List[DetectedSecret]:
+                          patterns: Dict) -> List[DetectedSecret]:
         """Scan a single line for Python-specific secrets"""
         secrets = []
 

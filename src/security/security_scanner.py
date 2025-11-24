@@ -1,5 +1,4 @@
-from typing import List, Dict, Any, Optional
-from pathlib import Path
+from typing import List, Dict, Any
 import structlog
 
 from .secret_detector import SecretDetector
@@ -30,9 +29,9 @@ class SecurityScanner:
             return chunk
 
         logger.debug("Scanning chunk for secrets",
-                   file_path=chunk.file_path,
-                   function_name=chunk.function_name,
-                   chunk_size=len(chunk.content))
+                     file_path=chunk.file_path,
+                     function_name=chunk.function_name,
+                     chunk_size=len(chunk.content))
 
         # Detect secrets
         detected_secrets = self.detector.detect_secrets(
@@ -55,10 +54,10 @@ class SecurityScanner:
         masked_chunk = self._create_masked_chunk(chunk, masking_result)
 
         logger.info("Chunk security scan completed",
-                   file_path=chunk.file_path,
-                   secrets_found=len(detected_secrets),
-                   secrets_masked=masking_result.masked_count,
-                   sensitivity_level=masking_result.sensitivity_level.value)
+                    file_path=chunk.file_path,
+                    secrets_found=len(detected_secrets),
+                    secrets_masked=masking_result.masked_count,
+                    sensitivity_level=masking_result.sensitivity_level.value)
 
         return masked_chunk
 
@@ -87,14 +86,14 @@ class SecurityScanner:
                         high_sensitivity_files.append(chunk.file_path)
 
         logger.info("Security scan completed",
-                   total_chunks=len(chunks),
-                   total_secrets_found=total_secrets,
-                   high_sensitivity_files=len(high_sensitivity_files))
+                    total_chunks=len(chunks),
+                    total_secrets_found=total_secrets,
+                    high_sensitivity_files=len(high_sensitivity_files))
 
         return masked_chunks
 
     def _create_masked_chunk(self, original_chunk: CodeChunk,
-                           masking_result: MaskingResult) -> CodeChunk:
+                             masking_result: MaskingResult) -> CodeChunk:
         """Create a new chunk with masked content and security metadata"""
         # Copy original chunk
         masked_chunk = CodeChunk(

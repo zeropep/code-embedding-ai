@@ -23,7 +23,8 @@ class PythonSecurityPatterns:
         SecretType.DATABASE_URL: [
             # Django database settings
             (r"'PASSWORD'\s*:\s*['\"]([^'\"]+)['\"]", 'django_db_password', 0.85),
-            (r"'ENGINE'\s*:\s*['\"]django\.db\.backends\.\w+['\"].*?'PASSWORD'\s*:\s*['\"]([^'\"]+)['\"]", 'django_db_config', 0.9),
+            (r"'ENGINE'\s*:\s*['\"]django\.db\.backends\.\w+['\"].*?'PASSWORD'\s*:\s*['\"]([^'\"]+)['\"]",
+             'django_db_config', 0.9),
             (r'DATABASE_URL\s*=\s*["\']([^"\']+://[^"\']+)["\']', 'database_url', 0.9),
             (r'DATABASES\s*=\s*\{[^}]*["\']PASSWORD["\']\s*:\s*["\']([^"\']+)["\']', 'django_databases', 0.85),
         ],
@@ -256,7 +257,9 @@ class PythonSecurityPatterns:
         return cls.ENV_FILE_PATTERNS
 
     @classmethod
-    def compile_patterns(cls, patterns: Dict[SecretType, List[Tuple[str, str, float]]]) -> Dict[SecretType, List[Tuple[re.Pattern, str, float]]]:
+    def compile_patterns(
+            cls, patterns: Dict[SecretType, List[Tuple[str, str, float]]]
+    ) -> Dict[SecretType, List[Tuple[re.Pattern, str, float]]]:
         """Compile regex patterns for efficiency"""
         compiled = {}
         for secret_type, pattern_list in patterns.items():

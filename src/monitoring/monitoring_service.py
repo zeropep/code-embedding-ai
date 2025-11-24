@@ -1,10 +1,8 @@
-import asyncio
 import time
-from typing import Dict, Any, Optional, Callable, List
-from pathlib import Path
+from typing import Dict, Any, Callable, List
 
 from .models import MonitoringConfig, PerformanceMetrics, SystemStatus
-from .logger import LoggerFactory, StructuredLogger
+from .logger import LoggerFactory, ComponentLogger
 from .metrics_collector import AdvancedMetricsCollector
 from .alert_manager import AlertManager
 from .health_monitor import HealthMonitor
@@ -31,7 +29,7 @@ class MonitoringService:
         self._setup_default_notifications()
 
         self.main_logger.info("Monitoring service initialized",
-                            config_enabled=self.config.enable_metrics)
+                              config_enabled=self.config.enable_metrics)
 
     def _setup_default_notifications(self):
         """Setup default alert notification handlers"""
@@ -163,8 +161,8 @@ class MonitoringService:
         }
 
     def register_health_check(self, name: str, check_function: Callable,
-                            timeout_seconds: float = 10.0, critical: bool = True,
-                            description: str = ""):
+                              timeout_seconds: float = 10.0, critical: bool = True,
+                              description: str = ""):
         """Register a custom health check"""
         self.health_monitor.register_health_check(
             name=name,
@@ -200,7 +198,7 @@ class MonitoringService:
         logger.info(f"Monitoring setup completed for {name}")
 
     def create_alert(self, title: str, message: str, severity: str = "warning",
-                   alert_type: str = "performance", metadata: Dict[str, Any] = None):
+                     alert_type: str = "performance", metadata: Dict[str, Any] = None):
         """Create a manual alert"""
         from .models import AlertType, LogLevel
 

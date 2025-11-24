@@ -1,9 +1,9 @@
 import asyncio
 import time
-from typing import Dict, Any, List, Optional, Callable
+from typing import Dict, Any, Optional, Callable
 from dataclasses import dataclass
 
-from .models import HealthCheck, SystemStatus, Alert, AlertType, LogLevel, MonitoringConfig
+from .models import HealthCheck, SystemStatus, AlertType, LogLevel, MonitoringConfig
 from .alert_manager import AlertManager
 
 
@@ -37,8 +37,8 @@ class HealthMonitor:
         self._is_monitoring = False
 
     def register_health_check(self, name: str, check_function: Callable[[], Any],
-                            timeout_seconds: float = 10.0, critical: bool = True,
-                            description: str = ""):
+                              timeout_seconds: float = 10.0, critical: bool = True,
+                              description: str = ""):
         """Register a new health check"""
         self.health_checks[name] = HealthCheckConfig(
             name=name,
@@ -86,7 +86,7 @@ class HealthMonitor:
 
             except asyncio.CancelledError:
                 break
-            except Exception as e:
+            except Exception:
                 # Log error but continue monitoring
                 pass
 
@@ -225,7 +225,7 @@ class HealthMonitor:
             return "unhealthy"
 
     async def _create_health_alert(self, component_name: str, result: HealthCheck,
-                                 check_config: HealthCheckConfig):
+                                   check_config: HealthCheckConfig):
         """Create alert for unhealthy component"""
         if not self.alert_manager:
             return
