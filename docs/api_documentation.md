@@ -233,7 +233,7 @@ POST /api/v1/search
         "query_embedding_time": 0.08,
         "vector_search_time": 0.05,
         "post_processing_time": 0.02,
-        "model_version": "jina-embeddings-v2-base-code"
+        "model_version": "jina-code-embeddings-1.5b"
     }
 }
 ```
@@ -265,7 +265,7 @@ GET /api/v1/chunks/{chunk_id}
         "last_modified": "2024-01-20T10:15:00Z"
     },
     "embedding_metadata": {
-        "model_version": "jina-embeddings-v2-base-code",
+        "model_version": "jina-code-embeddings-1.5b",
         "embedding_time": 0.45,
         "vector_dimension": 768
     },

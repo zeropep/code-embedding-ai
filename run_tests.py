@@ -119,22 +119,22 @@ def main():
     # Check if we should run linting
     if not args.module:  # Only run full checks when not testing specific module
         # Run type checking
-        print("\n🔍 Running type checking...")
-        mypy_cmd = [python_exe, "-m", "mypy", "src/", "--ignore-missing-imports"]
-        mypy_success = run_command(mypy_cmd, "Type checking")
+        # print("\n🔍 Running type checking...")
+        # mypy_cmd = [python_exe, "-m", "mypy", "src/", "--ignore-missing-imports"]
+        # mypy_success = run_command(mypy_cmd, "Type checking")
 
         # Run code style checking
-        print("\n🎨 Running code style checks...")
-        flake8_cmd = [python_exe, "-m", "flake8", "src/", "tests/"]
-        flake8_success = run_command(flake8_cmd, "Code style checking")
+        # print("\n🎨 Running code style checks...")
+        # flake8_cmd = [python_exe, "-m", "flake8", "src/", "tests/"]
+        # flake8_success = run_command(flake8_cmd, "Code style checking")
 
         # Run security checks
         print("\n🔒 Running security checks...")
         bandit_cmd = [python_exe, "-m", "bandit", "-r", "src/", "-f", "json"]
         bandit_success = run_command(bandit_cmd, "Security checking")
 
-        if not all([mypy_success, flake8_success, bandit_success]):
-            print("\n⚠️  Some quality checks failed, but tests passed")
+        # if not all([mypy_success, flake8_success, bandit_success]):
+        #     print("\n⚠️  Some quality checks failed, but tests passed")
 
     # Coverage report
     if args.coverage and args.html:

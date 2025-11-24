@@ -122,7 +122,7 @@ class ServiceManager:
         return EmbeddingConfig(
             api_key=os.getenv("JINA_API_KEY", ""),
             api_url=os.getenv("JINA_API_URL", "https://api.jina.ai/v1/embeddings"),
-            model_name=os.getenv("EMBEDDING_MODEL", "jina-embeddings-v2-base-code"),
+            model_name=os.getenv("EMBEDDING_MODEL", "jina-code-embeddings-1.5b"),
             dimensions=int(os.getenv("EMBEDDING_DIMENSIONS", "1024")),
             batch_size=int(os.getenv("EMBEDDING_BATCH_SIZE", "20")),
             max_concurrent_requests=int(os.getenv("MAX_CONCURRENT_EMBEDDINGS", "10")),

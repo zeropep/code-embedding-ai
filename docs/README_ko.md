@@ -7,7 +7,7 @@ Spring Boot + Thymeleaf 코드베이스를 처리하고, 시맨틱 임베딩을 
 - **다중 언어 코드 파싱**: AST 기반 분석을 통한 Java, Kotlin, HTML/Thymeleaf, Python 지원
 - **지능형 청킹**: 설정 가능한 토큰 제한과 오버랩을 가진 시맨틱 코드 분할
 - **보안 스캐닝**: 시크릿, 자격증명, 민감 데이터의 자동 탐지 및 마스킹
-- **벡터 임베딩**: jina-embeddings-v2-base-code를 사용한 고품질 코드 임베딩
+- **벡터 임베딩**: jina-code-embeddings-1.5b를 사용한 고품질 코드 임베딩
 - **벡터 저장소**: 효율적인 유사도 검색을 제공하는 ChromaDB 통합
 - **증분 업데이트**: 변경된 파일만 처리하는 Git diff 기반 모니터링
 - **REST API**: 외부 시스템 통합을 위한 완전한 기능의 웹 API
@@ -95,7 +95,7 @@ result = await pipeline.process_repository("/path/to/repo")
 - **패턴 매칭**: 설정 가능한 정규식 패턴 및 화이트리스트
 
 ### 3. 임베딩 서비스 (`src/embeddings/`)
-- **Jina AI 통합**: jina-embeddings-v2-base-code 모델
+- **Jina AI 통합**: jina-code-embeddings-1.5b 모델
 - **배치 처리**: 재시도 로직으로 최적화된 API 호출
 - **캐싱**: 성능을 위한 선택적 임베딩 캐싱
 
@@ -156,7 +156,7 @@ security:
   whitelist_patterns: ["test_", "example_"]
 
 embedding:
-  model_name: "jina-embeddings-v2-base-code"
+  model_name: "jina-code-embeddings-1.5b"
   batch_size: 32
   timeout: 30
   enable_caching: true

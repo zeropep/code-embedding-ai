@@ -55,7 +55,7 @@ parsing:
     include_inline_scripts: true
 
 embeddings:
-  model: "jina-embeddings-v2-base-code"
+  model: "jina-code-embeddings-1.5b"
   api_endpoint: "https://api.jina.ai/v1/embeddings"
   dimensions: 1024
   max_retries: 3

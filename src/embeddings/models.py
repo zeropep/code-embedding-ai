@@ -77,7 +77,7 @@ class BatchEmbeddingRequest:
 @dataclass
 class EmbeddingConfig:
     """Configuration for embedding generation"""
-    model_name: str = "jina-embeddings-v2-base-code"
+    model_name: str = "jina-code-embeddings-1.5b"
     api_url: str = "https://api.jina.ai/v1/embeddings"
     api_key: str = ""
     dimensions: int = 1024
@@ -102,7 +102,7 @@ class EmbeddingConfig:
         if self.api_url == "https://api.jina.ai/v1/embeddings":
             self.api_url = os.getenv("JINA_API_URL", self.api_url)
         # Load other optional configs from environment
-        if self.model_name == "jina-embeddings-v2-base-code":
+        if self.model_name == "jina-code-embeddings-1.5b":
             self.model_name = os.getenv("EMBEDDING_MODEL", self.model_name)
         if self.dimensions == 1024:
             self.dimensions = int(os.getenv("EMBEDDING_DIMENSIONS", str(self.dimensions)))

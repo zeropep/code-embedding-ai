@@ -8,7 +8,7 @@ A Python-based pipeline for processing Spring Boot + Thymeleaf codebases to gene
 
 - **Code Parsing**: Extract and chunk Java, Kotlin, and Thymeleaf code
 - **Security Scanning**: Detect and mask sensitive information
-- **Vector Embeddings**: Generate embeddings using jina-embeddings-v2-base-code
+- **Vector Embeddings**: Generate embeddings using jina-code-embeddings-1.5b
 - **Vector Storage**: Store embeddings in ChromaDB with metadata
 - **Incremental Updates**: Process only changed files using Git diff
 - **REST API**: Query embeddings via HTTP endpoints

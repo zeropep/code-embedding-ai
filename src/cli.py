@@ -477,7 +477,7 @@ def config_command(show):
         click.echo("    • Secret scanning: enabled")
         click.echo("    • Sensitivity threshold: 0.7")
         click.echo("  Embedding:")
-        click.echo("    • Model: jina-embeddings-v2-base-code")
+        click.echo("    • Model: jina-code-embeddings-1.5b")
         click.echo("    • Batch size: 20")
         click.echo("    • Dimensions: 1024")
     else:

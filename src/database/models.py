@@ -60,7 +60,7 @@ class ChunkMetadata:
     sensitivity_level: str = "LOW"
     file_hash: Optional[str] = None
     last_updated: float = None
-    embedding_model: str = "jina-embeddings-v2-base-code"
+    embedding_model: str = "jina-code-embeddings-1.5b"
     embedding_dimensions: int = 1024
 
     def __post_init__(self):

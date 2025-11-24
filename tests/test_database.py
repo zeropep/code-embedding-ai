@@ -106,7 +106,7 @@ class TestChunkMetadata:
         assert metadata.layer_type == "Unknown"
         assert metadata.token_count == 0
         assert metadata.sensitivity_level == "LOW"
-        assert metadata.embedding_model == "jina-embeddings-v2-base-code"
+        assert metadata.embedding_model == "jina-code-embeddings-1.5b"
         assert metadata.embedding_dimensions == 1024
 
     def test_metadata_to_dict(self):

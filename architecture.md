@@ -43,7 +43,7 @@
 **Purpose**: Generate vector embeddings for code chunks
 - **Input**: Sanitized code chunks
 - **Output**: Vector embeddings (1024-dimensional)
-- **Technology**: jina-embeddings-v2-base-code API
+- **Technology**: jina-code-embeddings-1.5b API
 - **Functions**:
   - `generate_embedding()` - Create vectors
   - `batch_process()` - Handle multiple chunks

@@ -7,7 +7,7 @@ A comprehensive AI-powered code analysis pipeline that processes Spring Boot + T
 - **Multi-language Code Parsing**: Support for Java, Kotlin, HTML/Thymeleaf, and Python with AST-based analysis
 - **Intelligent Chunking**: Semantic code splitting with configurable token limits and overlap
 - **Security Scanning**: Automated detection and masking of secrets, credentials, and sensitive data
-- **Vector Embeddings**: High-quality code embeddings using jina-embeddings-v2-base-code
+- **Vector Embeddings**: High-quality code embeddings using jina-code-embeddings-1.5b
 - **Vector Storage**: ChromaDB integration with efficient similarity search
 - **Incremental Updates**: Git diff-based monitoring for processing only changed files
 - **REST API**: Full-featured web API for integration with external systems
@@ -95,7 +95,7 @@ The pipeline consists of several key components:
 - **Pattern Matching**: Configurable regex patterns and whitelists
 
 ### 3. Embedding Service (`src/embeddings/`)
-- **Jina AI Integration**: jina-embeddings-v2-base-code model
+- **Jina AI Integration**: jina-code-embeddings-1.5b model
 - **Batch Processing**: Optimized API calls with retry logic
 - **Caching**: Optional embedding caching for performance
 
@@ -156,7 +156,7 @@ security:
   whitelist_patterns: ["test_", "example_"]
 
 embedding:
-  model_name: "jina-embeddings-v2-base-code"
+  model_name: "jina-code-embeddings-1.5b"
   batch_size: 32
   timeout: 30
   enable_caching: true

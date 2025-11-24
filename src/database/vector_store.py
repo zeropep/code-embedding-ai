@@ -331,7 +331,7 @@ class VectorStore:
                 token_count=chunk.token_count,
                 sensitivity_level=chunk.metadata.get('security', {}).get('sensitivity_level', 'LOW'),
                 file_hash=chunk.metadata.get('file_hash'),
-                embedding_model=embedding_data.get('model_version', 'jina-embeddings-v2-base-code'),
+                embedding_model=embedding_data.get('model_version', 'jina-code-embeddings-1.5b'),
                 embedding_dimensions=len(embedding_vector)
             )
 
