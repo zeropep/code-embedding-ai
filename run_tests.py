@@ -18,17 +18,17 @@ if sys.platform == 'win32':
 
 def run_command(cmd, description):
     """Run a command and handle errors"""
-    print(f"\n🔄 {description}")
+    print(f"\n[RUN] {description}")
     print(f"Running: {' '.join(cmd)}")
 
     try:
         result = subprocess.run(cmd, check=True, capture_output=True, text=True)
-        print(f"✅ {description} completed successfully")
+        print(f"[OK] {description} completed successfully")
         if result.stdout:
             print(result.stdout)
         return True
     except subprocess.CalledProcessError as e:
-        print(f"❌ {description} failed")
+        print(f"[FAIL] {description} failed")
         print(f"Error code: {e.returncode}")
         if e.stdout:
             print("STDOUT:", e.stdout)
@@ -67,7 +67,7 @@ def main():
             
             if venv_python.exists():
                 python_exe = str(venv_python)
-                print(f"📦 Using virtual environment: {python_exe}")
+                print(f"[VENV] Using virtual environment: {python_exe}")
 
     # Base pytest command
     pytest_cmd = [python_exe, "-m", "pytest"]
@@ -108,41 +108,41 @@ def main():
     success = run_command(pytest_cmd, "Running tests")
 
     if not success:
-        print("\n❌ Tests failed!")
+        print("\n[FAIL] Tests failed!")
         sys.exit(1)
 
     # Additional checks
     print("\n" + "="*50)
-    print("🧪 TEST SUMMARY")
+    print("[TEST SUMMARY]")
     print("="*50)
 
     # Check if we should run linting
     if not args.module:  # Only run full checks when not testing specific module
         # Run type checking
-        # print("\n🔍 Running type checking...")
+        # print("\n[TYPE] Running type checking...")
         # mypy_cmd = [python_exe, "-m", "mypy", "src/", "--ignore-missing-imports"]
         # mypy_success = run_command(mypy_cmd, "Type checking")
 
         # Run code style checking
-        # print("\n🎨 Running code style checks...")
+        # print("\n[STYLE] Running code style checks...")
         # flake8_cmd = [python_exe, "-m", "flake8", "src/", "tests/"]
         # flake8_success = run_command(flake8_cmd, "Code style checking")
 
         # Run security checks
-        print("\n🔒 Running security checks...")
+        print("\n[SECURITY] Running security checks...")
         bandit_cmd = [python_exe, "-m", "bandit", "-r", "src/", "-f", "json"]
         bandit_success = run_command(bandit_cmd, "Security checking")
 
         # if not all([mypy_success, flake8_success, bandit_success]):
-        #     print("\n⚠️  Some quality checks failed, but tests passed")
+        #     print("\n[WARN] Some quality checks failed, but tests passed")
 
     # Coverage report
     if args.coverage and args.html:
         coverage_path = Path("htmlcov/index.html")
         if coverage_path.exists():
-            print(f"\n📊 Coverage report generated: {coverage_path.absolute()}")
+            print(f"\n[COVERAGE] Report generated: {coverage_path.absolute()}")
 
-    print("\n✅ All tests completed successfully!")
+    print("\n[OK] All tests completed successfully!")
 
 
 if __name__ == "__main__":

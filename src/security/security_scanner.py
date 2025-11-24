@@ -212,18 +212,18 @@ class SecurityScanner:
         files_with_secrets = report["scan_summary"]["files_with_secrets"]
 
         if total_secrets == 0:
-            recommendations.append("✅ No secrets detected in the codebase.")
+            recommendations.append("[OK] No secrets detected in the codebase.")
             return recommendations
 
         if high_risk_count > 0:
             recommendations.append(
-                f"🚨 {high_risk_count} high-risk chunks found with sensitive data. "
+                f"[CRITICAL] {high_risk_count} high-risk chunks found with sensitive data. "
                 "Review and move secrets to secure configuration."
             )
 
         if files_with_secrets > 5:
             recommendations.append(
-                f"⚠️ {files_with_secrets} files contain secrets. "
+                f"[WARN] {files_with_secrets} files contain secrets. "
                 "Consider centralizing secret management."
             )
 
@@ -232,32 +232,32 @@ class SecurityScanner:
 
         if secret_types.get("private_key", 0) > 0:
             recommendations.append(
-                "🔑 Private keys detected. Store in secure key management system."
+                "[KEY] Private keys detected. Store in secure key management system."
             )
 
         if secret_types.get("database_url", 0) > 0:
             recommendations.append(
-                "🗄️ Database URLs with credentials found. Use environment variables."
+                "[DB] Database URLs with credentials found. Use environment variables."
             )
 
         if secret_types.get("password", 0) > 0:
             recommendations.append(
-                "🔒 Hardcoded passwords detected. Use secure password storage."
+                "[PASSWORD] Hardcoded passwords detected. Use secure password storage."
             )
 
         if secret_types.get("api_key", 0) > 0:
             recommendations.append(
-                "🔐 API keys found in code. Move to secure configuration."
+                "[API] API keys found in code. Move to secure configuration."
             )
 
         # General recommendations
         if total_secrets > 20:
             recommendations.append(
-                "📋 Consider implementing automated secret scanning in CI/CD pipeline."
+                "[RECOMMENDATION] Consider implementing automated secret scanning in CI/CD pipeline."
             )
 
         recommendations.append(
-            "💡 Ensure all secrets are properly rotated and use short-lived credentials where possible."
+            "[TIP] Ensure all secrets are properly rotated and use short-lived credentials where possible."
         )
 
         return recommendations

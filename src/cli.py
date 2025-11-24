@@ -53,9 +53,9 @@ def cli(ctx, config, verbose):
     ctx.obj['config_file'] = config
     ctx.obj['verbose'] = verbose
 
-    click.echo("🤖 Code Embedding AI Pipeline CLI")
+    click.echo("[CLI] Code Embedding AI Pipeline")
     if config:
-        click.echo(f"📁 Using config: {config}")
+        click.echo(f"[CONFIG] Using config: {config}")
 
 
 @cli.group()
@@ -76,7 +76,7 @@ def process_repository(ctx, repo_path, output_db, force, include, exclude, no_se
     """Process an entire repository to generate embeddings"""
     async def _process():
         try:
-            click.echo(f"🔄 Processing repository: {repo_path}")
+            click.echo(f"[PROCESSING] Repository: {repo_path}")
             start_time = time.time()
 
             # Create configurations
@@ -97,29 +97,29 @@ def process_repository(ctx, repo_path, output_db, force, include, exclude, no_se
             processing_time = time.time() - start_time
 
             if result["status"] == "success":
-                click.echo("✅ Repository processing completed successfully!")
+                click.echo("[OK] Repository processing completed successfully!")
 
                 # Display summary
                 summary = result.get("processing_summary", {})
-                click.echo("📊 Summary:")
-                click.echo(f"  • Files processed: {summary.get('total_files_parsed', 0)}")
-                click.echo(f"  • Chunks created: {summary.get('total_chunks_created', 0)}")
-                click.echo(f"  • Embeddings generated: {summary.get('chunks_with_embeddings', 0)}")
-                click.echo(f"  • Processing time: {processing_time:.2f}s")
+                click.echo("[SUMMARY]")
+                click.echo(f"  - Files processed: {summary.get('total_files_parsed', 0)}")
+                click.echo(f"  - Chunks created: {summary.get('total_chunks_created', 0)}")
+                click.echo(f"  - Embeddings generated: {summary.get('chunks_with_embeddings', 0)}")
+                click.echo(f"  - Processing time: {processing_time:.2f}s")
 
                 # Display security stats if enabled
                 if not no_security and "security_stats" in result:
                     sec_stats = result["security_stats"]["scan_summary"]
-                    click.echo("🔒 Security:")
-                    click.echo(f"  • Secrets found: {sec_stats.get('total_secrets_found', 0)}")
-                    click.echo(f"  • Files with secrets: {sec_stats.get('files_with_secrets', 0)}")
+                    click.echo("[SECURITY]")
+                    click.echo(f"  - Secrets found: {sec_stats.get('total_secrets_found', 0)}")
+                    click.echo(f"  - Files with secrets: {sec_stats.get('files_with_secrets', 0)}")
 
             else:
-                click.echo(f"❌ Processing failed: {result.get('error', 'Unknown error')}")
+                click.echo(f"[ERROR] Processing failed: {result.get('error', 'Unknown error')}")
                 sys.exit(1)
 
         except Exception as e:
-            click.echo(f"❌ Error: {str(e)}")
+            click.echo(f"[ERROR] {str(e)}")
             logger.error("Repository processing failed", error=str(e))
             sys.exit(1)
 
@@ -134,22 +134,22 @@ def process_files(ctx, files, output_db):
     """Process specific files"""
     async def _process():
         try:
-            click.echo(f"🔄 Processing {len(files)} file(s)")
+            click.echo(f"[PROCESSING] {len(files)} file(s)")
 
             pipeline = EmbeddingPipeline()
             result = await pipeline.process_files(list(files))
 
             if result["status"] == "success":
-                click.echo("✅ Files processed successfully!")
+                click.echo("[OK] Files processed successfully!")
                 summary = result.get("processing_summary", {})
-                click.echo(f"📊 Chunks created: {summary.get('total_chunks_created', 0)}")
-                click.echo(f"📊 Embeddings: {summary.get('chunks_with_embeddings', 0)}")
+                click.echo(f"  - Chunks created: {summary.get('total_chunks_created', 0)}")
+                click.echo(f"  - Embeddings: {summary.get('chunks_with_embeddings', 0)}")
             else:
-                click.echo(f"❌ Processing failed: {result.get('error', 'Unknown error')}")
+                click.echo(f"[ERROR] Processing failed: {result.get('error', 'Unknown error')}")
                 sys.exit(1)
 
         except Exception as e:
-            click.echo(f"❌ Error: {str(e)}")
+            click.echo(f"[ERROR] {str(e)}")
             sys.exit(1)
 
     asyncio.run(_process())
@@ -172,27 +172,27 @@ def semantic_search(query, db_path, limit, min_similarity, show_content, output_
     """Search for semantically similar code"""
     async def _search():
         try:
-            click.echo(f"🔍 Searching for: {query}")
+            click.echo(f"[SEARCH] Searching for: {query}")
 
             # Initialize vector store
             vector_config = VectorDBConfig(persist_directory=db_path)
             vector_store = VectorStore(vector_config)
 
             if not vector_store.connect():
-                click.echo("❌ Failed to connect to vector database")
+                click.echo("[ERROR] Failed to connect to vector database")
                 sys.exit(1)
 
             # For demonstration, we'll show a mock search
             # In reality, you'd need the embedding service to generate query embeddings
-            click.echo("⚠️  Note: Full semantic search requires running API server")
-            click.echo("💡 Use metadata search for direct database queries")
+            click.echo("[NOTE] Full semantic search requires running API server")
+            click.echo("[TIP] Use metadata search for direct database queries")
 
             # Show some sample results from database
             stats = vector_store.get_statistics()
-            click.echo(f"📊 Database contains {stats.total_chunks} chunks from {stats.total_files} files")
+            click.echo(f"[INFO] Database contains {stats.total_chunks} chunks from {stats.total_files} files")
 
         except Exception as e:
-            click.echo(f"❌ Search error: {str(e)}")
+            click.echo(f"[ERROR] Search error: {str(e)}")
             sys.exit(1)
 
     asyncio.run(_search())
@@ -226,23 +226,23 @@ def metadata_search(fp, fn_name, cl_name, lyr_type, language, db_path, limit, ou
                 filters["language"] = language
 
             if not filters:
-                click.echo("❌ At least one filter must be specified")
+                click.echo("[ERROR] At least one filter must be specified")
                 sys.exit(1)
 
-            click.echo(f"🔍 Searching with filters: {filters}")
+            click.echo(f"[SEARCH] Searching with filters: {filters}")
 
             # Initialize vector store
             vector_config = VectorDBConfig(persist_directory=db_path)
             vector_store = VectorStore(vector_config)
 
             if not vector_store.connect():
-                click.echo("❌ Failed to connect to vector database")
+                click.echo("[ERROR] Failed to connect to vector database")
                 sys.exit(1)
 
             # Perform metadata search
             results = vector_store.search_by_metadata(filters, limit=limit)
 
-            click.echo(f"✅ Found {len(results)} results")
+            click.echo(f"[OK] Found {len(results)} results")
 
             if output_format == "json":
                 output = [
@@ -284,7 +284,7 @@ def metadata_search(fp, fn_name, cl_name, lyr_type, language, db_path, limit, ou
                         click.echo(f"   Class: {result.metadata.get('class_name')}")
 
         except Exception as e:
-            click.echo(f"❌ Search error: {str(e)}")
+            click.echo(f"[ERROR] Search error: {str(e)}")
             sys.exit(1)
 
     asyncio.run(_search())
@@ -302,7 +302,7 @@ def check_updates(repo_path, state_dir):
     """Check for updates without applying them"""
     async def _check():
         try:
-            click.echo(f"🔍 Checking for updates in: {repo_path}")
+            click.echo(f"[CHECK] Checking for updates in: {repo_path}")
 
             update_service = UpdateService(repo_path, state_dir)
             await update_service.start()
@@ -310,7 +310,7 @@ def check_updates(repo_path, state_dir):
             try:
                 result = await update_service.quick_update()
 
-                click.echo("📊 Update check completed:")
+                click.echo("[RESULT] Update check completed:")
                 click.echo(f"  • Status: {result.status.value}")
                 click.echo(f"  • Changes detected: {result.total_changes}")
                 click.echo(f"  • Files processed: {result.files_processed}")
@@ -324,7 +324,7 @@ def check_updates(repo_path, state_dir):
                 await update_service.stop()
 
         except Exception as e:
-            click.echo(f"❌ Update check failed: {str(e)}")
+            click.echo(f"[ERROR] Update check failed: {str(e)}")
             sys.exit(1)
 
     asyncio.run(_check())
@@ -339,7 +339,7 @@ def apply_updates(repo_path, state_dir, force):
     async def _apply():
         try:
             mode = "full" if force else "incremental"
-            click.echo(f"🔄 Applying {mode} update to: {repo_path}")
+            click.echo(f"[UPDATE] Applying {mode} update to: {repo_path}")
 
             update_service = UpdateService(repo_path, state_dir)
             await update_service.start()
@@ -351,22 +351,22 @@ def apply_updates(repo_path, state_dir, force):
                     result = await update_service.quick_update()
 
                 if result.status.value == "completed":
-                    click.echo("✅ Update completed successfully!")
-                    click.echo("📊 Summary:")
+                    click.echo("[OK] Update completed successfully!")
+                    click.echo("[SUMMARY]")
                     click.echo(f"  • Files processed: {result.files_processed}")
                     click.echo(f"  • Chunks added: {result.chunks_added}")
                     click.echo(f"  • Chunks updated: {result.chunks_updated}")
                     click.echo(f"  • Chunks deleted: {result.chunks_deleted}")
                     click.echo(f"  • Processing time: {result.processing_time:.2f}s")
                 else:
-                    click.echo(f"❌ Update failed: {result.error_message}")
+                    click.echo(f"[ERROR] Update failed: {result.error_message}")
                     sys.exit(1)
 
             finally:
                 await update_service.stop()
 
         except Exception as e:
-            click.echo(f"❌ Update failed: {str(e)}")
+            click.echo(f"[ERROR] Update failed: {str(e)}")
             sys.exit(1)
 
     asyncio.run(_apply())
@@ -385,9 +385,9 @@ def start_server(host, port, reload):
     """Start the REST API server"""
     import uvicorn
 
-    click.echo("🚀 Starting Code Embedding AI API server")
-    click.echo(f"🌐 Server will be available at: http://{host}:{port}")
-    click.echo(f"📖 API documentation: http://{host}:{port}/docs")
+    click.echo("[SERVER] Starting Code Embedding AI API server")
+    click.echo(f"[URL] Server will be available at: http://{host}:{port}")
+    click.echo(f"[DOCS] API documentation: http://{host}:{port}/docs")
 
     uvicorn.run(
         "src.api.main:app",
@@ -412,12 +412,12 @@ def show_stats(db_path):
         vector_store = VectorStore(vector_config)
 
         if not vector_store.connect():
-            click.echo("❌ Failed to connect to vector database")
+            click.echo("[ERROR] Failed to connect to vector database")
             sys.exit(1)
 
         stats = vector_store.get_statistics()
 
-        click.echo("📊 Database Statistics:")
+        click.echo("[STATS] Database Statistics:")
         click.echo(f"  • Total chunks: {stats.total_chunks:,}")
         click.echo(f"  • Total files: {stats.total_files:,}")
         click.echo(f"  • Collection size: {stats.collection_size_mb:.2f} MB")
@@ -433,13 +433,13 @@ def show_stats(db_path):
                 click.echo(f"    - {layer}: {count:,}")
 
     except Exception as e:
-        click.echo(f"❌ Database error: {str(e)}")
+        click.echo(f"[ERROR] Database error: {str(e)}")
         sys.exit(1)
 
 
 @db.command("reset")
 @click.option("--db-path", default="./embeddings.db", help="ChromaDB path")
-@click.confirmation_option(prompt="⚠️  This will delete all data. Continue?")
+@click.confirmation_option(prompt="[WARNING] This will delete all data. Continue?")
 def reset_database(db_path):
     """Reset the vector database (delete all data)"""
     try:
@@ -447,19 +447,19 @@ def reset_database(db_path):
         vector_store = VectorStore(vector_config)
 
         if not vector_store.connect():
-            click.echo("❌ Failed to connect to vector database")
+            click.echo("[ERROR] Failed to connect to vector database")
             sys.exit(1)
 
         success = vector_store.reset_database()
 
         if success:
-            click.echo("✅ Database reset successfully")
+            click.echo("[OK] Database reset successfully")
         else:
-            click.echo("❌ Database reset failed")
+            click.echo("[ERROR] Database reset failed")
             sys.exit(1)
 
     except Exception as e:
-        click.echo(f"❌ Database error: {str(e)}")
+        click.echo(f"[ERROR] Database error: {str(e)}")
         sys.exit(1)
 
 
@@ -468,7 +468,7 @@ def reset_database(db_path):
 def config_command(show):
     """Configuration management"""
     if show:
-        click.echo("📋 Current Configuration:")
+        click.echo("[CONFIG] Current Configuration:")
         click.echo("  Parser:")
         click.echo("    • Min tokens: 50")
         click.echo("    • Max tokens: 500")

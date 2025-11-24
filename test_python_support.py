@@ -87,7 +87,7 @@ class ArticleSerializer(serializers.ModelSerializer):
         result = parser.parse_file(Path(temp_path))
 
         if result:
-            print(f"✅ 파싱 성공!")
+            print(f"[OK] Parsing successful!")
             print(f"  - 언어: {result.language.value}")
             print(f"  - 총 라인: {result.total_lines}")
             print(f"  - 청크 수: {result.total_chunks}")
@@ -107,7 +107,7 @@ class ArticleSerializer(serializers.ModelSerializer):
                         print(f"      문서: {chunk.metadata['docstring'][:50]}...")
                 print()
         else:
-            print("❌ 파싱 실패")
+            print("[FAIL] Parsing failed")
     finally:
         import os
         os.unlink(temp_path)
@@ -226,7 +226,7 @@ class Calculator:
 
 def main():
     print()
-    print("🐍 Python 지원 기능 테스트")
+    print("[TEST] Python Support Feature Test")
     print("=" * 60)
     print()
 
@@ -240,7 +240,7 @@ def main():
     test_metadata_extractor()
 
     print("=" * 60)
-    print("✅ 모든 테스트 완료!")
+    print("[OK] All tests completed!")
     print("=" * 60)
 
 
