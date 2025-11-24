@@ -25,15 +25,15 @@ class TestEmbeddingModels:
             batch_size=10,
             max_concurrent_requests=5
         )
-        assert valid_config.validate() is True
+        assert valid_config.validate() is None  # None means valid
 
-        # Invalid config - no API key
-        invalid_config = EmbeddingConfig(api_key="")
-        assert invalid_config.validate() is False
+        # Test invalid batch size (this doesn't depend on env vars)
+        invalid_config = EmbeddingConfig(api_key="test", batch_size=0)
+        assert invalid_config.validate() is not None  # Returns error message
 
-        # Invalid config - bad batch size
-        invalid_config2 = EmbeddingConfig(api_key="test", batch_size=0)
-        assert invalid_config2.validate() is False
+        # Test batch size too large
+        invalid_config2 = EmbeddingConfig(api_key="test", batch_size=101)
+        assert invalid_config2.validate() is not None  # Returns error message
 
     def test_embedding_request_creation(self):
         """Test EmbeddingRequest creation"""
@@ -298,7 +298,7 @@ class TestEmbeddingService:
         assert metrics["total_requests"] == 0
 
         # Update metrics manually for testing
-        service.metrics.update_success(1.5, 1, 1)
+        service.metrics.update_success(1.5)
         updated_metrics = service.get_metrics()
         assert updated_metrics["successful_requests"] == 1
 
