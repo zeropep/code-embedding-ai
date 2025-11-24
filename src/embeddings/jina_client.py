@@ -1,7 +1,6 @@
 import asyncio
 import aiohttp
 import hashlib
-import json
 import time
 from typing import List, Dict, Any, Optional, Tuple
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
@@ -23,9 +22,9 @@ class JinaEmbeddingClient:
         self._rate_limiter = asyncio.Semaphore(config.max_concurrent_requests)
 
         logger.info("JinaEmbeddingClient initialized",
-                   model=config.model_name,
-                   batch_size=config.batch_size,
-                   max_concurrent=config.max_concurrent_requests)
+                    model=config.model_name,
+                    batch_size=config.batch_size,
+                    max_concurrent=config.max_concurrent_requests)
 
     async def __aenter__(self):
         """Async context manager entry"""
@@ -93,8 +92,8 @@ class JinaEmbeddingClient:
 
         except Exception as e:
             logger.error("Failed to generate embedding",
-                        request_id=request_id,
-                        error=str(e))
+                         request_id=request_id,
+                         error=str(e))
             return EmbeddingResult(
                 request_id=request_id,
                 vector=None,
@@ -104,7 +103,7 @@ class JinaEmbeddingClient:
             )
 
     async def generate_embeddings_batch(self, contents: List[str],
-                                      request_ids: List[str] = None) -> List[EmbeddingResult]:
+                                        request_ids: List[str] = None) -> List[EmbeddingResult]:
         """Generate embeddings for multiple contents in batch"""
         if request_ids is None:
             request_ids = [f"batch_{i}" for i in range(len(contents))]
@@ -113,8 +112,8 @@ class JinaEmbeddingClient:
             raise ValueError("Contents and request_ids must have the same length")
 
         logger.info("Generating batch embeddings",
-                   batch_size=len(contents),
-                   model=self.config.model_name)
+                    batch_size=len(contents),
+                    model=self.config.model_name)
 
         # Process in chunks to respect batch size limits
         results = []
@@ -128,7 +127,7 @@ class JinaEmbeddingClient:
         return results
 
     async def _process_batch_chunk(self, contents: List[str],
-                                 request_ids: List[str]) -> List[EmbeddingResult]:
+                                   request_ids: List[str]) -> List[EmbeddingResult]:
         """Process a single batch chunk"""
         start_time = time.time()
 
@@ -228,8 +227,8 @@ class JinaEmbeddingClient:
         }
 
         logger.debug("Calling Jina API",
-                    model=self.config.model_name,
-                    input_count=len(contents))
+                     model=self.config.model_name,
+                     input_count=len(contents))
 
         async with self.session.post(self.config.api_url, json=payload) as response:
             if response.status == 200:
@@ -242,7 +241,7 @@ class JinaEmbeddingClient:
                             embeddings.append(item["embedding"])
 
                 logger.debug("Jina API call successful",
-                           embeddings_returned=len(embeddings))
+                             embeddings_returned=len(embeddings))
                 return embeddings
 
             elif response.status == 429:
@@ -254,8 +253,8 @@ class JinaEmbeddingClient:
             else:
                 error_text = await response.text()
                 logger.error("Jina API error",
-                           status=response.status,
-                           response=error_text)
+                             status=response.status,
+                             response=error_text)
                 raise aiohttp.ClientError(f"API error {response.status}: {error_text}")
 
     def _get_cache_key(self, content: str) -> str:

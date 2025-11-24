@@ -1,12 +1,11 @@
 import asyncio
 import uuid
 from typing import List, Dict, Any, Optional
-from concurrent.futures import ThreadPoolExecutor
 import structlog
 
 from .jina_client import JinaEmbeddingClient
 from .models import (EmbeddingConfig, EmbeddingRequest, EmbeddingResult,
-                     BatchEmbeddingRequest, EmbeddingStatus, EmbeddingMetrics)
+                     EmbeddingStatus, EmbeddingMetrics)
 from ..code_parser.models import CodeChunk
 
 
@@ -32,8 +31,8 @@ class EmbeddingService:
         self._is_running = False
 
         logger.info("EmbeddingService initialized",
-                   model=config.model_name,
-                   batch_size=config.batch_size)
+                    model=config.model_name,
+                    batch_size=config.batch_size)
 
     async def start(self):
         """Start the embedding service"""
@@ -99,18 +98,18 @@ class EmbeddingService:
                 embedded_chunks.append(embedded_chunk)
             else:
                 logger.warning("Failed to generate embedding for chunk",
-                             file_path=chunk.file_path,
-                             function_name=chunk.function_name,
-                             error=result.error_message)
+                               file_path=chunk.file_path,
+                               function_name=chunk.function_name,
+                               error=result.error_message)
                 # Add chunk without embedding but with error info
                 chunk.metadata = chunk.metadata or {}
                 chunk.metadata['embedding_error'] = result.error_message
                 embedded_chunks.append(chunk)
 
         logger.info("Chunk embeddings completed",
-                   total_chunks=len(chunks),
-                   successful_embeddings=sum(1 for r in results if r.status == EmbeddingStatus.COMPLETED),
-                   failed_embeddings=sum(1 for r in results if r.status == EmbeddingStatus.FAILED))
+                    total_chunks=len(chunks),
+                    successful_embeddings=sum(1 for r in results if r.status == EmbeddingStatus.COMPLETED),
+                    failed_embeddings=sum(1 for r in results if r.status == EmbeddingStatus.FAILED))
 
         return embedded_chunks
 
@@ -195,7 +194,7 @@ class EmbeddingService:
         logger.debug("Processing embedding batch", size=len(requests))
 
         try:
-            results = await self.generate_embeddings_async(requests)
+            await self.generate_embeddings_async(requests)
             # Results are handled by the async method
         except Exception as e:
             logger.error("Batch processing failed", error=str(e))

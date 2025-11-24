@@ -1,4 +1,3 @@
-import asyncio
 import uuid
 from typing import List, Dict, Any, Optional
 import structlog
@@ -27,8 +26,8 @@ class VectorStore:
         self._is_connected = False
 
         logger.info("VectorStore initialized",
-                   collection_name=config.collection_name,
-                   persistent=config.persistent)
+                    collection_name=config.collection_name,
+                    persistent=config.persistent)
 
     def connect(self) -> bool:
         """Connect to the vector database"""
@@ -84,8 +83,8 @@ class VectorStore:
 
         if conversion_errors:
             logger.warning("Some chunks failed conversion",
-                          failed_count=len(conversion_errors),
-                          errors=conversion_errors[:5])  # Log first 5 errors
+                           failed_count=len(conversion_errors),
+                           errors=conversion_errors[:5])  # Log first 5 errors
 
         if not stored_chunks:
             return BulkOperationResult(
@@ -106,17 +105,17 @@ class VectorStore:
             result.failed_items += len(conversion_errors)
 
         logger.info("Chunk storage completed",
-                   total_requested=len(chunks),
-                   converted=len(stored_chunks),
-                   stored=result.successful_items,
-                   failed=result.failed_items)
+                    total_requested=len(chunks),
+                    converted=len(stored_chunks),
+                    stored=result.successful_items,
+                    failed=result.failed_items)
 
         return result
 
     def search_similar_chunks(self, query_vector: List[float],
-                            top_k: int = 10,
-                            min_similarity: float = 0.0,
-                            filters: Optional[Dict[str, Any]] = None) -> List[VectorSearchResult]:
+                              top_k: int = 10,
+                              min_similarity: float = 0.0,
+                              filters: Optional[Dict[str, Any]] = None) -> List[VectorSearchResult]:
         """Search for similar code chunks"""
         if not self._ensure_connected():
             logger.error("Database not connected for search")
@@ -130,9 +129,9 @@ class VectorStore:
         )
 
         logger.debug("Searching similar chunks",
-                    top_k=query.top_k,
-                    min_similarity=min_similarity,
-                    has_filters=filters is not None)
+                     top_k=query.top_k,
+                     min_similarity=min_similarity,
+                     has_filters=filters is not None)
 
         results = self.client.search_similar(query)
 
@@ -140,7 +139,7 @@ class VectorStore:
         return results
 
     def search_by_metadata(self, filters: Dict[str, Any],
-                          limit: int = 100) -> List[VectorSearchResult]:
+                           limit: int = 100) -> List[VectorSearchResult]:
         """Search chunks by metadata filters only"""
         if not self._ensure_connected():
             return []
@@ -214,15 +213,15 @@ class VectorStore:
             # Delete the chunks
             result = self.client.delete_chunks(chunk_ids)
             logger.info("File chunks deleted",
-                       file_path=file_path,
-                       chunks_deleted=result.successful_items)
+                        file_path=file_path,
+                        chunks_deleted=result.successful_items)
 
             return result
 
         except Exception as e:
             logger.error("Failed to delete file chunks",
-                        file_path=file_path,
-                        error=str(e))
+                         file_path=file_path,
+                         error=str(e))
             return BulkOperationResult(
                 operation_type="delete",
                 total_items=0,
@@ -309,8 +308,8 @@ class VectorStore:
             # Check if chunk has embedding
             if 'embedding' not in chunk.metadata or not chunk.metadata['embedding'].get('vector'):
                 logger.warning("Chunk missing embedding vector",
-                             file_path=chunk.file_path,
-                             function_name=chunk.function_name)
+                               file_path=chunk.file_path,
+                               function_name=chunk.function_name)
                 return None
 
             embedding_data = chunk.metadata['embedding']
@@ -345,8 +344,8 @@ class VectorStore:
 
         except Exception as e:
             logger.error("Failed to convert chunk to stored chunk",
-                        file_path=chunk.file_path,
-                        error=str(e))
+                         file_path=chunk.file_path,
+                         error=str(e))
             return None
 
     def _ensure_connected(self) -> bool:
@@ -356,25 +355,25 @@ class VectorStore:
         return True
 
     def search_by_function_name(self, function_name: str,
-                              top_k: int = 10) -> List[VectorSearchResult]:
+                                top_k: int = 10) -> List[VectorSearchResult]:
         """Search chunks by function name"""
         filters = {"function_name": function_name}
         return self.search_by_metadata(filters, limit=top_k)
 
     def search_by_class_name(self, class_name: str,
-                           top_k: int = 10) -> List[VectorSearchResult]:
+                             top_k: int = 10) -> List[VectorSearchResult]:
         """Search chunks by class name"""
         filters = {"class_name": class_name}
         return self.search_by_metadata(filters, limit=top_k)
 
     def search_by_layer_type(self, layer_type: str,
-                           top_k: int = 10) -> List[VectorSearchResult]:
+                             top_k: int = 10) -> List[VectorSearchResult]:
         """Search chunks by layer type (Controller, Service, etc.)"""
         filters = {"layer_type": layer_type}
         return self.search_by_metadata(filters, limit=top_k)
 
     def search_by_sensitivity(self, sensitivity_level: str,
-                            top_k: int = 10) -> List[VectorSearchResult]:
+                              top_k: int = 10) -> List[VectorSearchResult]:
         """Search chunks by sensitivity level"""
         filters = {"sensitivity_level": sensitivity_level}
         return self.search_by_metadata(filters, limit=top_k)

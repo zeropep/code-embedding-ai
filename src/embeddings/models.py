@@ -94,7 +94,7 @@ class EmbeddingConfig:
         """Load values from environment variables if not explicitly set"""
         # Ensure .env file is loaded
         load_dotenv()
-        
+
         # Only load from env if api_key is empty (default value)
         if not self.api_key:
             self.api_key = os.getenv("JINA_API_KEY", "")
@@ -109,7 +109,8 @@ class EmbeddingConfig:
         if self.batch_size == 20:
             self.batch_size = int(os.getenv("EMBEDDING_BATCH_SIZE", str(self.batch_size)))
         if self.max_concurrent_requests == 10:
-            self.max_concurrent_requests = int(os.getenv("MAX_CONCURRENT_EMBEDDINGS", str(self.max_concurrent_requests)))
+            self.max_concurrent_requests = int(
+                os.getenv("MAX_CONCURRENT_EMBEDDINGS", str(self.max_concurrent_requests)))
         if self.timeout == 30:
             self.timeout = int(os.getenv("EMBEDDING_TIMEOUT", str(self.timeout)))
         if self.enable_caching:

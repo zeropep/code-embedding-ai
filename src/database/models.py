@@ -1,8 +1,7 @@
 from dataclasses import dataclass
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 from enum import Enum
 import time
-import json
 
 
 class VectorDBStatus(Enum):

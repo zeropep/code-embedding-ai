@@ -1,8 +1,7 @@
 import chromadb
 from chromadb.config import Settings
-import uuid
 import time
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 import structlog
 
 from .models import (VectorDBConfig, ChunkMetadata, StoredChunk, VectorSearchResult,
@@ -22,17 +21,17 @@ class ChromaDBClient:
         self.status = VectorDBStatus.DISCONNECTED
 
         logger.info("ChromaDBClient initialized",
-                   host=config.host,
-                   port=config.port,
-                   collection=config.collection_name)
+                    host=config.host,
+                    port=config.port,
+                    collection=config.collection_name)
 
     def connect(self) -> bool:
         """Connect to ChromaDB"""
         try:
             self.status = VectorDBStatus.INITIALIZING
             logger.info("Connecting to ChromaDB",
-                       host=self.config.host,
-                       port=self.config.port)
+                        host=self.config.host,
+                        port=self.config.port)
 
             if self.config.persistent:
                 # Persistent client with disk storage
@@ -58,7 +57,7 @@ class ChromaDBClient:
             self.status = VectorDBStatus.CONNECTED
 
             logger.info("Connected to ChromaDB successfully",
-                       collection_name=self.config.collection_name)
+                        collection_name=self.config.collection_name)
             return True
 
         except Exception as e:
@@ -87,13 +86,13 @@ class ChromaDBClient:
                 name=self.config.collection_name
             )
             logger.info("Retrieved existing collection",
-                       collection_name=self.config.collection_name)
+                        collection_name=self.config.collection_name)
             return collection
 
         except Exception:
             # Collection doesn't exist, create it
             logger.info("Creating new collection",
-                       collection_name=self.config.collection_name)
+                        collection_name=self.config.collection_name)
 
             metadata = {
                 "hnsw:space": "cosine",  # Use cosine similarity
@@ -154,10 +153,10 @@ class ChromaDBClient:
         )
 
         logger.info("Chunk storage completed",
-                   total=len(chunks),
-                   successful=successful,
-                   failed=failed,
-                   processing_time=processing_time)
+                    total=len(chunks),
+                    successful=successful,
+                    failed=failed,
+                    processing_time=processing_time)
 
         return result
 
@@ -214,8 +213,8 @@ class ChromaDBClient:
 
             search_time = (time.time() - start_time) * 1000  # Convert to ms
             logger.debug("Search completed",
-                        results_count=len(search_results),
-                        search_time_ms=search_time)
+                         results_count=len(search_results),
+                         search_time_ms=search_time)
 
             return search_results
 
@@ -380,7 +379,8 @@ class ChromaDBClient:
                         for key in counts_dict:
                             counts_dict[key] = int(counts_dict[key] * scale_factor)
 
-                total_files = int(len(file_paths) * (total_chunks / sample_size)) if sample_size < total_chunks else len(file_paths)
+                total_files = int(len(file_paths) * (total_chunks / sample_size)
+                                  ) if sample_size < total_chunks else len(file_paths)
 
             else:
                 language_counts = {}
@@ -397,8 +397,8 @@ class ChromaDBClient:
             )
 
             logger.debug("Statistics gathered",
-                        total_chunks=total_chunks,
-                        total_files=total_files)
+                         total_chunks=total_chunks,
+                         total_files=total_files)
 
             return stats
 

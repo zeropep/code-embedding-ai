@@ -1,6 +1,5 @@
 import asyncio
-from typing import List, Dict, Any, Optional
-from pathlib import Path
+from typing import List, Dict, Any
 import structlog
 
 from .embedding_service import EmbeddingService
@@ -53,8 +52,8 @@ class EmbeddingPipeline:
                 all_chunks.extend(parsed_file.chunks)
 
             logger.info("Parsing completed",
-                       total_files=len(parsed_files),
-                       total_chunks=len(all_chunks))
+                        total_files=len(parsed_files),
+                        total_chunks=len(all_chunks))
 
             # Step 2: Security scanning and masking
             logger.info("Step 2: Security scanning and masking")
@@ -76,10 +75,10 @@ class EmbeddingPipeline:
             )
 
             logger.info("Repository processing completed",
-                       total_files=len(parsed_files),
-                       total_chunks=len(embedded_chunks),
-                       successful_embeddings=sum(1 for c in embedded_chunks
-                                               if 'embedding' in c.metadata))
+                        total_files=len(parsed_files),
+                        total_chunks=len(embedded_chunks),
+                        successful_embeddings=sum(1 for c in embedded_chunks
+                                                  if 'embedding' in c.metadata))
 
             return result
 
@@ -144,16 +143,16 @@ class EmbeddingPipeline:
             loop.close()
 
     def _compile_pipeline_result(self,
-                                source: str,
-                                parsed_files: List,
-                                original_chunks: List[CodeChunk],
-                                secured_chunks: List[CodeChunk],
-                                embedded_chunks: List[CodeChunk]) -> Dict[str, Any]:
+                                 source: str,
+                                 parsed_files: List,
+                                 original_chunks: List[CodeChunk],
+                                 secured_chunks: List[CodeChunk],
+                                 embedded_chunks: List[CodeChunk]) -> Dict[str, Any]:
         """Compile comprehensive pipeline results"""
 
         # Calculate statistics
         embedding_success_count = sum(1 for chunk in embedded_chunks
-                                    if 'embedding' in chunk.metadata)
+                                      if 'embedding' in chunk.metadata)
 
         security_stats = self.security_scanner.generate_security_report(secured_chunks)
         embedding_metrics = self.embedding_service.get_metrics()
@@ -191,7 +190,7 @@ class EmbeddingPipeline:
                 "supported_files": len(parsed_files),
                 "total_tokens": sum(chunk.token_count for chunk in original_chunks),
                 "avg_tokens_per_chunk": (sum(chunk.token_count for chunk in original_chunks) /
-                                       len(original_chunks) if original_chunks else 0),
+                                         len(original_chunks) if original_chunks else 0),
                 "language_distribution": language_dist,
                 "layer_distribution": layer_dist
             },
