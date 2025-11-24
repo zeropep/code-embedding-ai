@@ -1,12 +1,12 @@
 # Core dependencies
 fastapi==0.104.1
-uvicorn==0.24.0
+uvicorn==0.23.1
 click==8.1.7
-pydantic==2.5.0
+pydantic==1.10.13
 python-dotenv==1.0.0
 
 # AI/ML dependencies
-jina==3.23.0
+jina==3.34.0
 sentence-transformers==2.2.2
 transformers==4.36.0
 torch==2.1.0
@@ -17,16 +17,17 @@ chromadb==0.4.18
 
 # Code parsing
 tree-sitter==0.20.4
-tree-sitter-java==0.20.2
-tree-sitter-kotlin==0.3.1
+tree-sitter-java==0.23.5
+tree-sitter-kotlin==1.1.0
 javalang==0.13.0
+beautifulsoup4>=4.9.0
 
 # Security scanning
-truffleHog==3.63.2
+truffleHog==2.2.1
 detect-secrets==1.4.0
 
 # Git operations
-GitPython==3.1.40
+GitPython==3.0.6
 
 # Utilities
 pyyaml==6.0.1
