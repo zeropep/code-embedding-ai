@@ -7,6 +7,7 @@ import sys
 import subprocess
 import argparse
 from pathlib import Path
+import os
 
 
 def run_command(cmd, description):
@@ -43,8 +44,27 @@ def main():
 
     args = parser.parse_args()
 
+    # Use current Python interpreter (prefer .venv if available)
+    python_exe = sys.executable
+    venv_path = Path(".venv")
+    if venv_path.exists():
+        # Check if we're in a venv or use .venv
+        if hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix):
+            # Already in a virtual environment
+            pass
+        else:
+            # Try to use .venv if it exists
+            if os.name == 'nt':  # Windows
+                venv_python = venv_path / "Scripts" / "python.exe"
+            else:  # Unix/Linux/Mac
+                venv_python = venv_path / "bin" / "python"
+            
+            if venv_python.exists():
+                python_exe = str(venv_python)
+                print(f"📦 Using virtual environment: {python_exe}")
+
     # Base pytest command
-    pytest_cmd = ["python", "-m", "pytest"]
+    pytest_cmd = [python_exe, "-m", "pytest"]
 
     # Add verbosity
     if args.verbose:
@@ -94,17 +114,17 @@ def main():
     if not args.module:  # Only run full checks when not testing specific module
         # Run type checking
         print("\n🔍 Running type checking...")
-        mypy_cmd = ["python", "-m", "mypy", "src/", "--ignore-missing-imports"]
+        mypy_cmd = [python_exe, "-m", "mypy", "src/", "--ignore-missing-imports"]
         mypy_success = run_command(mypy_cmd, "Type checking")
 
         # Run code style checking
         print("\n🎨 Running code style checks...")
-        flake8_cmd = ["python", "-m", "flake8", "src/", "tests/"]
+        flake8_cmd = [python_exe, "-m", "flake8", "src/", "tests/"]
         flake8_success = run_command(flake8_cmd, "Code style checking")
 
         # Run security checks
         print("\n🔒 Running security checks...")
-        bandit_cmd = ["python", "-m", "bandit", "-r", "src/", "-f", "json"]
+        bandit_cmd = [python_exe, "-m", "bandit", "-r", "src/", "-f", "json"]
         bandit_success = run_command(bandit_cmd, "Security checking")
 
         if not all([mypy_success, flake8_success, bandit_success]):

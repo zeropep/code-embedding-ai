@@ -3,7 +3,7 @@ import hashlib
 import time
 import os
 from pathlib import Path
-from typing import List, Dict, Optional, Set, Tuple
+from typing import List, Dict, Optional, Set, Tuple, Any
 import structlog
 
 from .models import (FileChange, ChangeType, RepositoryState, GitInfo,

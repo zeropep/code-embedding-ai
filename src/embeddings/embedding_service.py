@@ -20,8 +20,9 @@ class EmbeddingService:
         if config is None:
             config = EmbeddingConfig()
 
-        if not config.validate():
-            raise ValueError("Invalid embedding configuration")
+        validation_error = config.validate()
+        if validation_error:
+            raise ValueError(f"Invalid embedding configuration: {validation_error}")
 
         self.config = config
         self.client = JinaEmbeddingClient(config)
@@ -280,9 +281,10 @@ class EmbeddingService:
                 logger.info("Config updated", key=key, old_value=old_value, new_value=value)
 
         # Validate updated config
-        if not self.config.validate():
-            logger.error("Invalid configuration after update")
-            raise ValueError("Invalid configuration")
+        validation_error = self.config.validate()
+        if validation_error:
+            logger.error("Invalid configuration after update", error=validation_error)
+            raise ValueError(f"Invalid configuration: {validation_error}")
 
         # Update client config
         self.client.config = self.config

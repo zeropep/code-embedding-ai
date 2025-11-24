@@ -6,6 +6,10 @@ from contextlib import asynccontextmanager
 import time
 import uuid
 import structlog
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 from .routes import all_routers
 from .dependencies import startup_event, shutdown_event

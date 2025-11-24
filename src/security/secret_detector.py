@@ -1,6 +1,7 @@
 import re
 import json
 import subprocess
+import math
 from typing import List, Dict, Optional, Tuple
 from pathlib import Path
 import structlog
@@ -52,7 +53,7 @@ class SecretDetector:
                 r'(?i)(jwt_secret|session_secret)\s*[=:]\s*([^\\s"\']{16,})(?=\\s|$|;|,)',
             ],
             SecretType.CREDENTIAL: [
-                r'(?i)(username|user)\s*[=:]\s*["\']([^"\']{3,})["\']\\s*[,;]?\\s*(?i)(password|pwd)\s*[=:]\s*["\']([^"\']{3,})["\']',
+                r'(?i)(username|user)\s*[=:]\s*["\']([^"\']{3,})["\']\s*[,;]?\s*(password|pwd)\s*[=:]\s*["\']([^"\']{3,})["\']',
                 r'(?i)(credential|auth)\s*[=:]\s*["\']([^"\']{10,})["\']',
             ],
             SecretType.HASH: [
@@ -113,7 +114,10 @@ class SecretDetector:
                         continue
 
                     # Extract the secret content (usually the last group)
-                    secret_content = match.group(-1) if match.groups() else match.group()
+                    if match.lastindex and match.lastindex > 0:
+                        secret_content = match.group(match.lastindex)
+                    else:
+                        secret_content = match.group()
 
                     # Calculate confidence based on pattern strength and content characteristics
                     confidence = self._calculate_confidence(secret_content, secret_type, pattern)
@@ -212,13 +216,14 @@ class SecretDetector:
         for char in string:
             frequency[char] = frequency.get(char, 0) + 1
 
-        # Calculate entropy
+        # Calculate Shannon entropy: H = -Σ(p * log2(p))
         entropy = 0.0
         string_length = len(string)
 
         for count in frequency.values():
             probability = count / string_length
-            entropy -= probability * (probability.bit_length() - 1)
+            if probability > 0:  # Avoid log(0)
+                entropy -= probability * math.log2(probability)
 
         return entropy
 

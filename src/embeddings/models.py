@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from typing import List, Dict, Any, Optional
 from enum import Enum
 import time
+import os
+from dotenv import load_dotenv
 
 
 class EmbeddingStatus(Enum):
@@ -88,17 +90,43 @@ class EmbeddingConfig:
     enable_caching: bool = True
     cache_ttl: int = 3600  # Cache TTL in seconds
 
-    def validate(self) -> bool:
-        """Validate configuration"""
+    def __post_init__(self):
+        """Load values from environment variables if not explicitly set"""
+        # Ensure .env file is loaded
+        load_dotenv()
+        
+        # Only load from env if api_key is empty (default value)
         if not self.api_key:
-            return False
+            self.api_key = os.getenv("JINA_API_KEY", "")
+        # Only load from env if api_url is default value
+        if self.api_url == "https://api.jina.ai/v1/embeddings":
+            self.api_url = os.getenv("JINA_API_URL", self.api_url)
+        # Load other optional configs from environment
+        if self.model_name == "jina-embeddings-v2-base-code":
+            self.model_name = os.getenv("EMBEDDING_MODEL", self.model_name)
+        if self.dimensions == 1024:
+            self.dimensions = int(os.getenv("EMBEDDING_DIMENSIONS", str(self.dimensions)))
+        if self.batch_size == 20:
+            self.batch_size = int(os.getenv("EMBEDDING_BATCH_SIZE", str(self.batch_size)))
+        if self.max_concurrent_requests == 10:
+            self.max_concurrent_requests = int(os.getenv("MAX_CONCURRENT_EMBEDDINGS", str(self.max_concurrent_requests)))
+        if self.timeout == 30:
+            self.timeout = int(os.getenv("EMBEDDING_TIMEOUT", str(self.timeout)))
+        if self.enable_caching:
+            cache_env = os.getenv("ENABLE_EMBEDDING_CACHE", "true")
+            self.enable_caching = cache_env.lower() == "true"
+
+    def validate(self) -> Optional[str]:
+        """Validate configuration. Returns None if valid, error message if invalid."""
+        if not self.api_key:
+            return "api_key is required but not set"
         if not self.api_url:
-            return False
+            return "api_url is required but not set"
         if self.batch_size <= 0 or self.batch_size > 100:
-            return False
+            return f"batch_size must be between 1 and 100, got {self.batch_size}"
         if self.max_concurrent_requests <= 0:
-            return False
-        return True
+            return f"max_concurrent_requests must be greater than 0, got {self.max_concurrent_requests}"
+        return None
 
 
 @dataclass
