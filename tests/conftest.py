@@ -6,7 +6,7 @@ import pytest
 import tempfile
 import shutil
 from pathlib import Path
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock, MagicMock, AsyncMock
 import asyncio
 
 from src.code_parser.models import ParserConfig, CodeChunk, CodeLanguage, LayerType
@@ -14,7 +14,7 @@ from src.security.models import SecurityConfig
 from src.embeddings.models import EmbeddingConfig
 from src.database.models import VectorDBConfig
 from src.updates.models import UpdateConfig
-from src.monitoring.models import MonitoringConfig
+from src.monitoring.models import MonitoringConfig, LogLevel
 
 
 @pytest.fixture(scope="session")
@@ -219,7 +219,7 @@ def monitoring_config():
     return MonitoringConfig(
         enable_metrics=True,
         enable_alerting=False,  # Disable for tests
-        log_level="DEBUG"
+        log_level=LogLevel.DEBUG
     )
 
 
@@ -253,11 +253,11 @@ public class TestClass {
 def mock_embedding_service():
     """Mock embedding service for testing"""
     service = Mock()
-    service.start = Mock(return_value=asyncio.coroutine(lambda: None)())
-    service.stop = Mock(return_value=asyncio.coroutine(lambda: None)())
-    service.generate_chunk_embeddings = Mock(return_value=asyncio.coroutine(lambda chunks: chunks)())
+    service.start = AsyncMock(return_value=None)
+    service.stop = AsyncMock(return_value=None)
+    service.generate_chunk_embeddings = AsyncMock(side_effect=lambda chunks: chunks)
     service.get_metrics = Mock(return_value={"total_requests": 0})
-    service.health_check = Mock(return_value=asyncio.coroutine(lambda: {"status": "healthy"})())
+    service.health_check = AsyncMock(return_value={"status": "healthy"})
     service._is_running = True
     return service
 

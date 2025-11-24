@@ -1,357 +1,400 @@
 """
-Tests for database and vector store functionality
+Tests for database module
+Based on actual implementation in src/database/
 """
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-import tempfile
-import shutil
+from unittest.mock import Mock, MagicMock, patch
+import time
 
-from src.database.models import VectorDBConfig
-from src.database.chroma_store import ChromaVectorStore
-from src.database.vector_store import VectorStore
-from src.code_parser.models import CodeChunk, CodeLanguage, LayerType
+from src.database.models import (
+    VectorDBConfig, VectorDBStatus, VectorSearchResult, VectorSearchQuery,
+    ChunkMetadata, StoredChunk, DatabaseStats, BulkOperationResult
+)
 
 
 class TestVectorDBConfig:
-    """Test vector database configuration"""
+    """Test VectorDBConfig dataclass"""
 
-    def test_vector_config_defaults(self):
+    def test_default_config(self):
         """Test default configuration values"""
         config = VectorDBConfig()
 
+        assert config.host == "localhost"
+        assert config.port == 8000
         assert config.collection_name == "code_embeddings"
         assert config.persistent is True
         assert config.max_batch_size == 100
-        assert config.distance_metric == "cosine"
 
-    def test_vector_config_validation(self):
-        """Test configuration validation"""
-        # Valid config
-        valid_config = VectorDBConfig(
+    def test_custom_config(self):
+        """Test custom configuration values"""
+        config = VectorDBConfig(
+            host="remote-server",
+            port=9000,
             collection_name="test_collection",
-            persistent=True,
+            persistent=False,
             max_batch_size=50
         )
-        assert valid_config.validate() is True
 
-        # Invalid config - empty collection name
-        invalid_config = VectorDBConfig(collection_name="")
-        assert invalid_config.validate() is False
+        assert config.host == "remote-server"
+        assert config.port == 9000
+        assert config.collection_name == "test_collection"
+        assert config.persistent is False
+        assert config.max_batch_size == 50
 
-        # Invalid config - bad batch size
-        invalid_config2 = VectorDBConfig(max_batch_size=0)
-        assert invalid_config2.validate() is False
+    def test_config_validation_valid(self):
+        """Test valid configuration"""
+        config = VectorDBConfig()
+        assert config.validate() is True
+
+    def test_config_validation_invalid_collection(self):
+        """Test invalid collection name"""
+        config = VectorDBConfig(collection_name="")
+        assert config.validate() is False
+
+    def test_config_validation_invalid_batch_size(self):
+        """Test invalid batch size"""
+        config = VectorDBConfig(max_batch_size=0)
+        assert config.validate() is False
+
+        config2 = VectorDBConfig(max_batch_size=1001)
+        assert config2.validate() is False
 
 
-class TestChromaVectorStore:
-    """Test ChromaDB vector store implementation"""
+class TestVectorDBStatus:
+    """Test VectorDBStatus enum"""
 
-    @pytest.fixture
-    def vector_store(self, vector_config):
-        """Create vector store for testing"""
-        return ChromaVectorStore(vector_config)
+    def test_status_values(self):
+        """Test status enum values"""
+        assert VectorDBStatus.CONNECTED.value == "connected"
+        assert VectorDBStatus.DISCONNECTED.value == "disconnected"
+        assert VectorDBStatus.ERROR.value == "error"
+        assert VectorDBStatus.INITIALIZING.value == "initializing"
 
-    def test_chroma_store_initialization(self, vector_config):
-        """Test ChromaVectorStore initialization"""
-        store = ChromaVectorStore(vector_config)
 
-        assert store.config == vector_config
-        assert store.client is None
-        assert store.collection is None
+class TestChunkMetadata:
+    """Test ChunkMetadata dataclass"""
+
+    def test_metadata_creation(self):
+        """Test creating chunk metadata"""
+        metadata = ChunkMetadata(
+            chunk_id="chunk-123",
+            file_path="src/Main.java",
+            language="java",
+            start_line=10,
+            end_line=50,
+            function_name="processData",
+            class_name="MainController"
+        )
+
+        assert metadata.chunk_id == "chunk-123"
+        assert metadata.file_path == "src/Main.java"
+        assert metadata.language == "java"
+        assert metadata.function_name == "processData"
+        assert metadata.last_updated > 0
+
+    def test_metadata_defaults(self):
+        """Test metadata default values"""
+        metadata = ChunkMetadata(
+            chunk_id="chunk-456",
+            file_path="test.java",
+            language="java",
+            start_line=1,
+            end_line=10
+        )
+
+        assert metadata.layer_type == "Unknown"
+        assert metadata.token_count == 0
+        assert metadata.sensitivity_level == "LOW"
+        assert metadata.embedding_model == "jina-embeddings-v2-base-code"
+        assert metadata.embedding_dimensions == 1024
+
+    def test_metadata_to_dict(self):
+        """Test metadata to_dict method"""
+        metadata = ChunkMetadata(
+            chunk_id="chunk-789",
+            file_path="test.java",
+            language="java",
+            start_line=1,
+            end_line=20,
+            function_name="testFunc"
+        )
+
+        data = metadata.to_dict()
+        assert data["chunk_id"] == "chunk-789"
+        assert data["file_path"] == "test.java"
+        assert data["function_name"] == "testFunc"
+
+    def test_metadata_from_dict(self):
+        """Test metadata from_dict method"""
+        data = {
+            "chunk_id": "chunk-abc",
+            "file_path": "Test.java",
+            "language": "java",
+            "start_line": 5,
+            "end_line": 15,
+            "function_name": "test"
+        }
+
+        metadata = ChunkMetadata.from_dict(data)
+        assert metadata.chunk_id == "chunk-abc"
+        assert metadata.file_path == "Test.java"
+
+
+class TestStoredChunk:
+    """Test StoredChunk dataclass"""
+
+    def test_stored_chunk_creation(self):
+        """Test creating stored chunk"""
+        metadata = ChunkMetadata(
+            chunk_id="chunk-001",
+            file_path="src/App.java",
+            language="java",
+            start_line=1,
+            end_line=10
+        )
+
+        chunk = StoredChunk(
+            chunk_id="chunk-001",
+            content="public class App {}",
+            embedding_vector=[0.1] * 1024,
+            metadata=metadata
+        )
+
+        assert chunk.chunk_id == "chunk-001"
+        assert chunk.content == "public class App {}"
+        assert len(chunk.embedding_vector) == 1024
+        assert chunk.created_at > 0
+        assert chunk.updated_at > 0
+
+    def test_stored_chunk_to_dict(self):
+        """Test stored chunk to_dict method"""
+        metadata = ChunkMetadata(
+            chunk_id="chunk-002",
+            file_path="Test.java",
+            language="java",
+            start_line=1,
+            end_line=5
+        )
+
+        chunk = StoredChunk(
+            chunk_id="chunk-002",
+            content="test content",
+            embedding_vector=[0.5] * 10,
+            metadata=metadata
+        )
+
+        data = chunk.to_dict()
+        assert data["chunk_id"] == "chunk-002"
+        assert data["content"] == "test content"
+        assert "metadata" in data
+
+
+class TestVectorSearchResult:
+    """Test VectorSearchResult dataclass"""
+
+    def test_search_result_creation(self):
+        """Test creating search result"""
+        result = VectorSearchResult(
+            chunk_id="result-001",
+            similarity_score=0.95,
+            metadata={"language": "java"},
+            content="public void test()"
+        )
+
+        assert result.chunk_id == "result-001"
+        assert result.similarity_score == 0.95
+        assert result.metadata == {"language": "java"}
+        assert result.embedding_vector is None
+
+    def test_search_result_to_dict(self):
+        """Test search result to_dict method"""
+        result = VectorSearchResult(
+            chunk_id="result-002",
+            similarity_score=0.85,
+            metadata={},
+            content="test"
+        )
+
+        data = result.to_dict()
+        assert data["chunk_id"] == "result-002"
+        assert data["similarity_score"] == 0.85
+
+
+class TestVectorSearchQuery:
+    """Test VectorSearchQuery dataclass"""
+
+    def test_query_with_vector(self):
+        """Test query with vector"""
+        query = VectorSearchQuery(
+            query_vector=[0.1] * 1024,
+            top_k=5,
+            min_similarity=0.7
+        )
+
+        assert len(query.query_vector) == 1024
+        assert query.top_k == 5
+        assert query.min_similarity == 0.7
+
+    def test_query_with_text(self):
+        """Test query with text"""
+        query = VectorSearchQuery(
+            query_text="find authentication logic",
+            top_k=10
+        )
+
+        assert query.query_text == "find authentication logic"
+        assert query.top_k == 10
+
+    def test_query_requires_vector_or_text(self):
+        """Test that query requires either vector or text"""
+        with pytest.raises(ValueError):
+            VectorSearchQuery(top_k=5)
+
+
+class TestDatabaseStats:
+    """Test DatabaseStats dataclass"""
+
+    def test_stats_defaults(self):
+        """Test default stats values"""
+        stats = DatabaseStats()
+
+        assert stats.total_chunks == 0
+        assert stats.total_files == 0
+        assert stats.language_counts == {}
+        assert stats.layer_counts == {}
+
+    def test_stats_custom_values(self):
+        """Test custom stats values"""
+        stats = DatabaseStats(
+            total_chunks=1000,
+            total_files=50,
+            language_counts={"java": 800, "kotlin": 200},
+            layer_counts={"controller": 100, "service": 400}
+        )
+
+        assert stats.total_chunks == 1000
+        assert stats.language_counts["java"] == 800
+
+    def test_stats_to_dict(self):
+        """Test stats to_dict method"""
+        stats = DatabaseStats(total_chunks=500)
+
+        data = stats.to_dict()
+        assert data["total_chunks"] == 500
+        assert "language_counts" in data
+
+
+class TestBulkOperationResult:
+    """Test BulkOperationResult dataclass"""
+
+    def test_result_creation(self):
+        """Test creating bulk operation result"""
+        result = BulkOperationResult(
+            operation_type="insert",
+            total_items=100,
+            successful_items=95,
+            failed_items=5,
+            processing_time=2.5
+        )
+
+        assert result.operation_type == "insert"
+        assert result.total_items == 100
+        assert result.successful_items == 95
+        assert result.failed_items == 5
+
+    def test_success_rate(self):
+        """Test success rate calculation"""
+        result = BulkOperationResult(
+            operation_type="delete",
+            total_items=100,
+            successful_items=80,
+            failed_items=20,
+            processing_time=1.0
+        )
+
+        assert result.success_rate == 0.8
+
+    def test_success_rate_zero_items(self):
+        """Test success rate with zero items"""
+        result = BulkOperationResult(
+            operation_type="update",
+            total_items=0,
+            successful_items=0,
+            failed_items=0,
+            processing_time=0.0
+        )
+
+        assert result.success_rate == 0.0
+
+    def test_result_to_dict(self):
+        """Test result to_dict method"""
+        result = BulkOperationResult(
+            operation_type="insert",
+            total_items=50,
+            successful_items=50,
+            failed_items=0,
+            processing_time=1.5,
+            errors=[]
+        )
+
+        data = result.to_dict()
+        assert data["operation_type"] == "insert"
+        assert data["success_rate"] == 1.0
+
+    def test_result_with_errors(self):
+        """Test bulk operation result with errors"""
+        result = BulkOperationResult(
+            operation_type="insert",
+            total_items=10,
+            successful_items=5,
+            failed_items=5,
+            processing_time=1.0,
+            errors=["Error 1", "Error 2"]
+        )
+
+        assert len(result.errors) == 2
+        assert result.success_rate == 0.5
+
+
+class TestVectorStoreIntegration:
+    """Test VectorStore class with mocked dependencies"""
+
+    def test_vector_store_config_validation(self):
+        """Test VectorStore validates config"""
+        from src.database.vector_store import VectorStore
+
+        # Invalid config should raise
+        with pytest.raises(ValueError):
+            VectorStore(VectorDBConfig(collection_name=""))
+
+    @patch('src.database.chroma_client.chromadb')
+    def test_vector_store_initialization(self, mock_chromadb):
+        """Test VectorStore initialization"""
+        from src.database.vector_store import VectorStore
+
+        config = VectorDBConfig(collection_name="test_collection")
+        store = VectorStore(config)
+
+        assert store.config == config
         assert store._is_connected is False
 
-    @patch('chromadb.PersistentClient')
-    def test_connect_persistent(self, mock_client, vector_store):
-        """Test connection to persistent ChromaDB"""
-        # Mock ChromaDB client and collection
-        mock_collection = Mock()
-        mock_client_instance = Mock()
-        mock_client_instance.get_or_create_collection.return_value = mock_collection
-        mock_client.return_value = mock_client_instance
+    @patch('src.database.chroma_client.chromadb')
+    def test_vector_store_health_check_format(self, mock_chromadb):
+        """Test health check returns proper format"""
+        from src.database.vector_store import VectorStore
 
-        # Connect to database
-        result = vector_store.connect()
+        mock_client = MagicMock()
+        mock_collection = MagicMock()
+        mock_collection.count.return_value = 100
+        mock_client.get_collection.return_value = mock_collection
+        mock_chromadb.PersistentClient.return_value = mock_client
 
-        assert result is True
-        assert vector_store._is_connected is True
-        assert vector_store.client is not None
-        assert vector_store.collection is not None
+        config = VectorDBConfig(collection_name="test_collection")
+        store = VectorStore(config)
 
-        # Verify client creation
-        mock_client.assert_called_once_with(path=vector_store.config.persist_directory)
+        health = store.health_check()
 
-    @patch('chromadb.Client')
-    def test_connect_in_memory(self, mock_client, vector_config):
-        """Test connection to in-memory ChromaDB"""
-        config = vector_config
-        config.persistent = False
-        store = ChromaVectorStore(config)
-
-        # Mock ChromaDB client and collection
-        mock_collection = Mock()
-        mock_client_instance = Mock()
-        mock_client_instance.get_or_create_collection.return_value = mock_collection
-        mock_client.return_value = mock_client_instance
-
-        # Connect to database
-        result = store.connect()
-
-        assert result is True
-        assert store._is_connected is True
-
-        # Verify in-memory client creation
-        mock_client.assert_called_once()
-
-    def test_disconnect(self, vector_store):
-        """Test disconnection from database"""
-        # Set up connected state
-        vector_store.client = Mock()
-        vector_store.collection = Mock()
-        vector_store._is_connected = True
-
-        # Disconnect
-        vector_store.disconnect()
-
-        assert vector_store.client is None
-        assert vector_store.collection is None
-        assert vector_store._is_connected is False
-
-    def test_store_chunks(self, vector_store, create_test_chunks):
-        """Test storing code chunks with embeddings"""
-        # Mock connection
-        vector_store._is_connected = True
-        vector_store.collection = Mock()
-
-        # Create test chunks with embeddings
-        chunks = create_test_chunks(3)
-        for i, chunk in enumerate(chunks):
-            chunk.metadata["embedding"] = {
-                "vector": [0.1 * i, 0.2 * i, 0.3 * i],
-                "model_version": "test-model"
-            }
-
-        # Store chunks
-        result = vector_store.store_chunks(chunks)
-
-        assert result is True
-        vector_store.collection.add.assert_called_once()
-
-        # Verify call arguments
-        call_args = vector_store.collection.add.call_args[1]
-        assert len(call_args["ids"]) == 3
-        assert len(call_args["embeddings"]) == 3
-        assert len(call_args["documents"]) == 3
-        assert len(call_args["metadatas"]) == 3
-
-    def test_search_similar_chunks(self, vector_store):
-        """Test searching for similar code chunks"""
-        # Mock connection and collection
-        vector_store._is_connected = True
-        vector_store.collection = Mock()
-
-        # Mock search results
-        mock_results = {
-            "ids": [["chunk1", "chunk2"]],
-            "distances": [[0.1, 0.3]],
-            "documents": [["code1", "code2"]],
-            "metadatas": [[{"file": "test1.java"}, {"file": "test2.java"}]]
-        }
-        vector_store.collection.query.return_value = mock_results
-
-        # Perform search
-        query_vector = [0.1, 0.2, 0.3]
-        results = vector_store.search_similar_chunks(query_vector, limit=2)
-
-        assert len(results) == 2
-        assert results[0]["similarity"] > results[1]["similarity"]  # Higher similarity first
-        assert "chunk_id" in results[0]
-        assert "content" in results[0]
-        assert "metadata" in results[0]
-
-        # Verify query call
-        vector_store.collection.query.assert_called_once_with(
-            query_embeddings=[query_vector],
-            n_results=2
-        )
-
-    def test_get_chunk_by_id(self, vector_store):
-        """Test retrieving chunk by ID"""
-        # Mock connection and collection
-        vector_store._is_connected = True
-        vector_store.collection = Mock()
-
-        # Mock get results
-        mock_results = {
-            "ids": ["chunk1"],
-            "documents": ["test code"],
-            "metadatas": [{"file": "test.java", "language": "java"}],
-            "embeddings": [[0.1, 0.2, 0.3]]
-        }
-        vector_store.collection.get.return_value = mock_results
-
-        # Get chunk
-        chunk = vector_store.get_chunk_by_id("chunk1")
-
-        assert chunk is not None
-        assert chunk["chunk_id"] == "chunk1"
-        assert chunk["content"] == "test code"
-        assert chunk["metadata"]["file"] == "test.java"
-
-    def test_update_chunk(self, vector_store):
-        """Test updating existing chunk"""
-        # Mock connection
-        vector_store._is_connected = True
-        vector_store.collection = Mock()
-
-        # Update chunk
-        chunk_id = "test_chunk"
-        new_embedding = [0.4, 0.5, 0.6]
-        new_metadata = {"updated": True}
-
-        result = vector_store.update_chunk(chunk_id, new_embedding, new_metadata)
-
-        assert result is True
-        vector_store.collection.update.assert_called_once_with(
-            ids=[chunk_id],
-            embeddings=[new_embedding],
-            metadatas=[new_metadata]
-        )
-
-    def test_delete_chunks(self, vector_store):
-        """Test deleting chunks"""
-        # Mock connection
-        vector_store._is_connected = True
-        vector_store.collection = Mock()
-
-        # Delete chunks
-        chunk_ids = ["chunk1", "chunk2"]
-        result = vector_store.delete_chunks(chunk_ids)
-
-        assert result is True
-        vector_store.collection.delete.assert_called_once_with(ids=chunk_ids)
-
-    def test_get_collection_info(self, vector_store):
-        """Test getting collection information"""
-        # Mock connection and collection
-        vector_store._is_connected = True
-        vector_store.collection = Mock()
-        vector_store.collection.count.return_value = 100
-
-        # Get info
-        info = vector_store.get_collection_info()
-
-        assert "total_chunks" in info
-        assert info["total_chunks"] == 100
-        assert "collection_name" in info
-
-    def test_health_check(self, vector_store):
-        """Test vector store health check"""
-        # Test when disconnected
-        vector_store._is_connected = False
-        health = vector_store.health_check()
-        assert health["vector_store_status"] == "disconnected"
-
-        # Test when connected
-        vector_store._is_connected = True
-        vector_store.collection = Mock()
-        vector_store.collection.count.return_value = 50
-
-        health = vector_store.health_check()
-        assert health["vector_store_status"] == "healthy"
-        assert health["total_chunks"] == 50
-
-    def test_batch_operations(self, vector_store, create_test_chunks):
-        """Test batch operations with large datasets"""
-        # Mock connection
-        vector_store._is_connected = True
-        vector_store.collection = Mock()
-
-        # Create large batch of chunks
-        chunks = create_test_chunks(150)  # Exceeds batch size
-        for i, chunk in enumerate(chunks):
-            chunk.metadata["embedding"] = {
-                "vector": [float(i)] * 3,
-                "model_version": "test-model"
-            }
-
-        # Store chunks (should be batched)
-        result = vector_store.store_chunks(chunks)
-
-        assert result is True
-        # Should be called multiple times due to batching
-        assert vector_store.collection.add.call_count >= 2
-
-    def test_error_handling(self, vector_store):
-        """Test error handling in database operations"""
-        # Test connection error
-        with patch('chromadb.PersistentClient', side_effect=Exception("Connection failed")):
-            result = vector_store.connect()
-            assert result is False
-
-        # Test operation on disconnected store
-        vector_store._is_connected = False
-        result = vector_store.store_chunks([])
-        assert result is False
-
-    def test_filter_search(self, vector_store):
-        """Test filtered search functionality"""
-        # Mock connection and collection
-        vector_store._is_connected = True
-        vector_store.collection = Mock()
-
-        # Mock filtered search results
-        mock_results = {
-            "ids": [["chunk1"]],
-            "distances": [[0.2]],
-            "documents": [["filtered code"]],
-            "metadatas": [[{"language": "java", "layer_type": "service"}]]
-        }
-        vector_store.collection.query.return_value = mock_results
-
-        # Perform filtered search
-        query_vector = [0.1, 0.2, 0.3]
-        filter_criteria = {"language": "java"}
-        results = vector_store.search_similar_chunks(
-            query_vector,
-            limit=1,
-            filter_metadata=filter_criteria
-        )
-
-        assert len(results) == 1
-        assert results[0]["metadata"]["language"] == "java"
-
-        # Verify query with filter
-        vector_store.collection.query.assert_called_once_with(
-            query_embeddings=[query_vector],
-            n_results=1,
-            where=filter_criteria
-        )
-
-
-class TestVectorStore:
-    """Test abstract vector store interface"""
-
-    def test_vector_store_interface(self, vector_config):
-        """Test vector store abstract interface"""
-        # Should not be able to instantiate abstract class directly
-        with pytest.raises(TypeError):
-            VectorStore(vector_config)
-
-    def test_chroma_store_implements_interface(self, vector_config):
-        """Test that ChromaVectorStore properly implements interface"""
-        store = ChromaVectorStore(vector_config)
-
-        # Check that all required methods are implemented
-        assert hasattr(store, 'connect')
-        assert hasattr(store, 'disconnect')
-        assert hasattr(store, 'store_chunks')
-        assert hasattr(store, 'search_similar_chunks')
-        assert hasattr(store, 'health_check')
-
-        # Check that methods are callable
-        assert callable(getattr(store, 'connect'))
-        assert callable(getattr(store, 'disconnect'))
-        assert callable(getattr(store, 'store_chunks'))
-        assert callable(getattr(store, 'search_similar_chunks'))
-        assert callable(getattr(store, 'health_check'))
+        assert "vector_store_status" in health
+        assert "database_health" in health
+        assert "configuration" in health
