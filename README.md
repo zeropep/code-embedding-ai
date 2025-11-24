@@ -33,33 +33,45 @@ cp .env.example .env
 
 ### 2. Configuration
 
-Edit `.env` file:
+Edit `.env` file (see `.env.example` for all options):
 ```env
+# Required
 JINA_API_KEY=your_jina_api_key_here
-REPO_PATH=./target_repo
-CHROMADB_HOST=localhost
+
+# Embedding settings
+EMBEDDING_BATCH_SIZE=8              # Texts per API call (recommended: 8-20)
+MAX_CONCURRENT_EMBEDDINGS=5         # Max concurrent API requests
+EMBEDDING_TIMEOUT=60                # API timeout in seconds
+
+# ChromaDB settings
+CHROMADB_PERSIST_DIR=./chroma_db
+CHROMADB_COLLECTION_NAME=code_embeddings
+
+# Parser settings
+CHUNK_MIN_TOKENS=50
+CHUNK_MAX_TOKENS=500
 ```
 
 ### 3. Usage
 
 #### Process a repository
 ```bash
-python src/main.py process --repo-path /path/to/spring-boot-repo
+python -m src.cli process repository /path/to/spring-boot-repo
 ```
 
 #### Update embeddings (incremental)
 ```bash
-python src/main.py update --repo-path /path/to/spring-boot-repo
+python -m src.cli update apply /path/to/spring-boot-repo
 ```
 
 #### Search embeddings
 ```bash
-python src/main.py search --query "user authentication"
+python -m src.cli search semantic "user authentication"
 ```
 
 #### Start API server
 ```bash
-python src/main.py serve
+python -m src.cli server start --port 8000
 ```
 
 ## Architecture

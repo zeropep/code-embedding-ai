@@ -128,14 +128,45 @@ result = await pipeline.process_repository("/path/to/repo")
 # 필수
 JINA_API_KEY=your-jina-api-key
 
-# 선택 사항
+# Jina AI 임베딩 설정
+JINA_API_URL=https://api.jina.ai/v1/embeddings
+EMBEDDING_MODEL=jina-code-embeddings-1.5b
+EMBEDDING_DIMENSIONS=1024
+EMBEDDING_BATCH_SIZE=8              # API 호출당 텍스트 수 (권장: 8-20)
+MAX_CONCURRENT_EMBEDDINGS=5         # 최대 동시 API 요청 수
+EMBEDDING_TIMEOUT=60                # API 타임아웃(초)
+ENABLE_EMBEDDING_CACHE=true         # 인메모리 임베딩 캐시
+
+# ChromaDB 설정
+CHROMADB_HOST=localhost
+CHROMADB_PORT=8000
 CHROMADB_COLLECTION_NAME=code_embeddings
-CHROMADB_PERSIST_DIR=/data/vector_db
+CHROMADB_PERSISTENT=true
+CHROMADB_PERSIST_DIR=./chroma_db
+CHROMADB_BATCH_SIZE=100
+
+# 파서 설정
+CHUNK_MIN_TOKENS=50                 # 청크당 최소 토큰
+CHUNK_MAX_TOKENS=500                # 청크당 최대 토큰
+CHUNK_OVERLAP_TOKENS=20             # 청크 간 오버랩
+INCLUDE_COMMENTS=false
+SUPPORTED_EXTENSIONS=.java,.kt,.html,.xml,.properties,.yml,.yaml,.py
+
+# 보안 설정
+ENABLE_SECRET_SCANNING=true
+PRESERVE_SYNTAX=true
+SENSITIVITY_THRESHOLD=0.7
+SCAN_COMMENTS=true
+SCAN_STRINGS=true
+
+# 업데이트 서비스 설정
+UPDATE_STATE_DIR=./update_state
+UPDATE_CHECK_INTERVAL=300
+MAX_CONCURRENT_UPDATES=3
+ENABLE_FILE_WATCHING=false
+
+# 로깅 설정
 LOG_LEVEL=INFO
-CHUNK_MIN_TOKENS=50
-CHUNK_MAX_TOKENS=500
-SECURITY_ENABLED=true
-API_PORT=8000
 ```
 
 ### 구성 파일
