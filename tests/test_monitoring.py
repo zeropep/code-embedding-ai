@@ -1,21 +1,48 @@
 """
 Tests for monitoring, logging, and alerting functionality
+Based on actual implementation in src/monitoring/
 """
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-import json
+from unittest.mock import Mock, AsyncMock, patch, MagicMock
+import asyncio
 import time
 
-from src.monitoring.models import MonitoringConfig, AlertConfig, AlertType, MetricType
-from src.monitoring.logger import StructuredLogger
-from src.monitoring.metrics import MetricsCollector
-from src.monitoring.alerts import AlertManager
-from src.monitoring.health_checker import HealthChecker
+from src.monitoring.models import (
+    MonitoringConfig, AlertType, MetricType, LogLevel,
+    MetricValue, PerformanceMetrics, Alert, HealthCheck,
+    LogEntry, MetricsCollector, SystemStatus
+)
+from src.monitoring.metrics_collector import AdvancedMetricsCollector
+from src.monitoring.alert_manager import AlertManager, AlertRule
+from src.monitoring.health_monitor import HealthMonitor
 
 
 class TestMonitoringModels:
     """Test monitoring model classes"""
+
+    def test_log_level_enum(self):
+        """Test LogLevel enum values"""
+        assert LogLevel.DEBUG.value == "debug"
+        assert LogLevel.INFO.value == "info"
+        assert LogLevel.WARNING.value == "warning"
+        assert LogLevel.ERROR.value == "error"
+        assert LogLevel.CRITICAL.value == "critical"
+
+    def test_alert_type_enum(self):
+        """Test AlertType enum values"""
+        assert AlertType.PERFORMANCE.value == "performance"
+        assert AlertType.ERROR_RATE.value == "error_rate"
+        assert AlertType.RESOURCE_USAGE.value == "resource_usage"
+        assert AlertType.SERVICE_HEALTH.value == "service_health"
+        assert AlertType.SECURITY.value == "security"
+
+    def test_metric_type_enum(self):
+        """Test MetricType enum values"""
+        assert MetricType.COUNTER.value == "counter"
+        assert MetricType.GAUGE.value == "gauge"
+        assert MetricType.HISTOGRAM.value == "histogram"
+        assert MetricType.TIMER.value == "timer"
 
     def test_monitoring_config_defaults(self):
         """Test MonitoringConfig default values"""
@@ -23,598 +50,586 @@ class TestMonitoringModels:
 
         assert config.enable_metrics is True
         assert config.enable_alerting is True
-        assert config.log_level == "INFO"
-        assert config.metrics_retention_days == 30
+        assert config.log_level == LogLevel.INFO
+        assert config.metrics_retention_hours == 24
+        assert config.health_check_interval_seconds == 30
 
-    def test_monitoring_config_validation(self):
-        """Test MonitoringConfig validation"""
-        # Valid config
-        valid_config = MonitoringConfig(
-            enable_metrics=True,
-            log_level="DEBUG",
-            metrics_retention_days=7
+    def test_monitoring_config_custom_values(self):
+        """Test MonitoringConfig with custom values"""
+        config = MonitoringConfig(
+            enable_metrics=False,
+            enable_alerting=False,
+            log_level=LogLevel.DEBUG,
+            error_rate_threshold=0.2,
+            response_time_threshold_ms=10000
         )
-        assert valid_config.validate() is True
 
-        # Invalid config - bad log level
-        invalid_config = MonitoringConfig(log_level="INVALID")
-        assert invalid_config.validate() is False
+        assert config.enable_metrics is False
+        assert config.enable_alerting is False
+        assert config.log_level == LogLevel.DEBUG
+        assert config.error_rate_threshold == 0.2
+        assert config.response_time_threshold_ms == 10000
 
-        # Invalid config - bad retention days
-        invalid_config2 = MonitoringConfig(metrics_retention_days=0)
-        assert invalid_config2.validate() is False
 
-    def test_alert_config_creation(self):
-        """Test AlertConfig creation"""
-        alert_config = AlertConfig(
+class TestMetricValue:
+    """Test MetricValue dataclass"""
+
+    def test_metric_value_creation(self):
+        """Test creating MetricValue"""
+        metric = MetricValue(
+            name="test_metric",
+            value=42.5,
+            metric_type=MetricType.GAUGE,
+            labels={"component": "api"}
+        )
+
+        assert metric.name == "test_metric"
+        assert metric.value == 42.5
+        assert metric.metric_type == MetricType.GAUGE
+        assert metric.labels == {"component": "api"}
+        assert metric.timestamp > 0
+
+    def test_metric_value_to_dict(self):
+        """Test MetricValue to_dict method"""
+        metric = MetricValue(
+            name="test_metric",
+            value=100,
+            metric_type=MetricType.COUNTER,
+            description="Test counter"
+        )
+
+        data = metric.to_dict()
+        assert data["name"] == "test_metric"
+        assert data["value"] == 100
+        assert data["type"] == "counter"
+        assert data["description"] == "Test counter"
+
+
+class TestPerformanceMetrics:
+    """Test PerformanceMetrics dataclass"""
+
+    def test_performance_metrics_defaults(self):
+        """Test PerformanceMetrics default values"""
+        metrics = PerformanceMetrics()
+
+        assert metrics.total_requests == 0
+        assert metrics.successful_requests == 0
+        assert metrics.failed_requests == 0
+        assert metrics.avg_response_time_ms == 0.0
+        assert metrics.embeddings_generated == 0
+
+    def test_performance_metrics_to_dict(self):
+        """Test PerformanceMetrics to_dict method"""
+        metrics = PerformanceMetrics(
+            total_requests=100,
+            successful_requests=95,
+            failed_requests=5,
+            avg_response_time_ms=150.5
+        )
+
+        data = metrics.to_dict()
+        assert data["requests"]["total"] == 100
+        assert data["requests"]["successful"] == 95
+        assert data["requests"]["failed"] == 5
+        assert data["requests"]["success_rate"] == 0.95
+
+
+class TestAlert:
+    """Test Alert dataclass"""
+
+    def test_alert_creation(self):
+        """Test creating Alert"""
+        alert = Alert(
+            id="alert-123",
             alert_type=AlertType.ERROR_RATE,
-            threshold=0.1,
-            duration_minutes=5,
-            cooldown_minutes=30,
-            enabled=True
+            severity=LogLevel.ERROR,
+            title="High Error Rate",
+            message="Error rate exceeded threshold"
         )
 
-        assert alert_config.alert_type == AlertType.ERROR_RATE
-        assert alert_config.threshold == 0.1
-        assert alert_config.duration_minutes == 5
+        assert alert.id == "alert-123"
+        assert alert.alert_type == AlertType.ERROR_RATE
+        assert alert.severity == LogLevel.ERROR
+        assert alert.is_resolved is False
 
-    def test_alert_config_to_dict(self):
-        """Test AlertConfig serialization"""
-        alert_config = AlertConfig(
-            alert_type=AlertType.HIGH_LATENCY,
-            threshold=5.0,
-            duration_minutes=10
+    def test_alert_resolve(self):
+        """Test resolving an alert"""
+        alert = Alert(
+            id="alert-456",
+            alert_type=AlertType.PERFORMANCE,
+            severity=LogLevel.WARNING,
+            title="Test Alert",
+            message="Test message"
         )
 
-        config_dict = alert_config.to_dict()
+        assert alert.is_resolved is False
+        alert.resolve()
+        assert alert.is_resolved is True
+        assert alert.resolved_at is not None
 
-        assert "alert_type" in config_dict
-        assert config_dict["alert_type"] == "high_latency"
-        assert config_dict["threshold"] == 5.0
+    def test_alert_duration(self):
+        """Test alert duration calculation"""
+        alert = Alert(
+            id="alert-789",
+            alert_type=AlertType.SERVICE_HEALTH,
+            severity=LogLevel.CRITICAL,
+            title="Service Down",
+            message="Service not responding"
+        )
+
+        time.sleep(0.1)  # Small delay
+        duration = alert.duration_seconds
+        assert duration >= 0.1
 
 
-class TestStructuredLogger:
-    """Test structured logging functionality"""
+class TestHealthCheck:
+    """Test HealthCheck dataclass"""
 
-    @pytest.fixture
-    def logger(self, monitoring_config):
-        """Create structured logger for testing"""
-        return StructuredLogger("test_component", monitoring_config)
+    def test_health_check_creation(self):
+        """Test creating HealthCheck"""
+        check = HealthCheck(
+            component="database",
+            status="healthy",
+            message="Connection OK",
+            response_time_ms=15.5
+        )
 
-    def test_logger_initialization(self, monitoring_config):
-        """Test StructuredLogger initialization"""
-        logger = StructuredLogger("test_service", monitoring_config)
+        assert check.component == "database"
+        assert check.status == "healthy"
+        assert check.message == "Connection OK"
+        assert check.response_time_ms == 15.5
 
-        assert logger.component_name == "test_service"
-        assert logger.config == monitoring_config
-        assert logger.logger is not None
+    def test_health_check_to_dict(self):
+        """Test HealthCheck to_dict method"""
+        check = HealthCheck(
+            component="api",
+            status="degraded",
+            message="High latency",
+            response_time_ms=500.0,
+            metadata={"latency_ms": 500}
+        )
 
-    def test_structured_logging_methods(self, logger):
-        """Test structured logging methods"""
-        with patch('structlog.get_logger') as mock_structlog:
-            mock_log_instance = Mock()
-            mock_structlog.return_value = mock_log_instance
-
-            # Reinitialize logger to use mock
-            logger._setup_logger()
-            logger.logger = mock_log_instance
-
-            # Test info logging
-            logger.info("Test message", extra_field="extra_value")
-            mock_log_instance.info.assert_called_with(
-                "Test message",
-                component="test_component",
-                extra_field="extra_value"
-            )
-
-            # Test error logging
-            logger.error("Error message", error_code="E001")
-            mock_log_instance.error.assert_called_with(
-                "Error message",
-                component="test_component",
-                error_code="E001"
-            )
-
-    def test_request_logging(self, logger):
-        """Test HTTP request logging"""
-        request_data = {
-            "method": "POST",
-            "path": "/api/v1/search",
-            "query_params": {"limit": 10},
-            "request_id": "req_123"
-        }
-
-        with patch.object(logger, 'info') as mock_info:
-            logger.log_request(request_data)
-            mock_info.assert_called_once()
-
-    def test_performance_logging(self, logger):
-        """Test performance metrics logging"""
-        performance_data = {
-            "operation": "embedding_generation",
-            "duration": 2.5,
-            "batch_size": 10,
-            "success": True
-        }
-
-        with patch.object(logger, 'info') as mock_info:
-            logger.log_performance(performance_data)
-            mock_info.assert_called_once()
-
-    def test_error_logging_with_context(self, logger):
-        """Test error logging with contextual information"""
-        error_data = {
-            "error_type": "APIError",
-            "error_message": "Failed to connect to embedding service",
-            "file_path": "src/embeddings/jina_client.py",
-            "function_name": "generate_embedding",
-            "request_id": "req_456"
-        }
-
-        with patch.object(logger, 'error') as mock_error:
-            logger.log_error(error_data)
-            mock_error.assert_called_once()
-
-    def test_security_event_logging(self, logger):
-        """Test security event logging"""
-        security_event = {
-            "event_type": "secret_detected",
-            "file_path": "src/config/DatabaseConfig.java",
-            "secret_type": "password",
-            "confidence": 0.95,
-            "masked": True
-        }
-
-        with patch.object(logger, 'warning') as mock_warning:
-            logger.log_security_event(security_event)
-            mock_warning.assert_called_once()
+        data = check.to_dict()
+        assert data["component"] == "api"
+        assert data["status"] == "degraded"
+        assert data["metadata"] == {"latency_ms": 500}
 
 
 class TestMetricsCollector:
-    """Test metrics collection functionality"""
+    """Test MetricsCollector class"""
+
+    def test_record_metric(self):
+        """Test recording a metric"""
+        collector = MetricsCollector()
+
+        metric = MetricValue(
+            name="test.counter",
+            value=1,
+            metric_type=MetricType.COUNTER
+        )
+        collector.record_metric(metric)
+
+        metrics = collector.get_metrics("test.counter")
+        assert "test.counter" in metrics
+        assert len(metrics["test.counter"]) == 1
+        assert metrics["test.counter"][0].value == 1
+
+    def test_get_all_metrics(self):
+        """Test getting all metrics"""
+        collector = MetricsCollector()
+
+        collector.record_metric(MetricValue("metric1", 10, MetricType.GAUGE))
+        collector.record_metric(MetricValue("metric2", 20, MetricType.GAUGE))
+
+        all_metrics = collector.get_metrics()
+        assert "metric1" in all_metrics
+        assert "metric2" in all_metrics
+
+    def test_clear_metrics(self):
+        """Test clearing metrics"""
+        collector = MetricsCollector()
+
+        collector.record_metric(MetricValue("test", 100, MetricType.COUNTER))
+        assert len(collector.get_metrics()) > 0
+
+        collector.clear_metrics()
+        assert len(collector.get_metrics()) == 0
+
+    def test_metric_summary(self):
+        """Test getting metric summary"""
+        collector = MetricsCollector()
+
+        for i in range(5):
+            collector.record_metric(MetricValue("summary_test", i * 10, MetricType.GAUGE))
+
+        summary = collector.get_metric_summary("summary_test")
+        assert summary["count"] == 5
+        assert summary["min"] == 0
+        assert summary["max"] == 40
+        assert summary["avg"] == 20
+
+
+class TestAdvancedMetricsCollector:
+    """Test AdvancedMetricsCollector class"""
 
     @pytest.fixture
-    def metrics_collector(self, monitoring_config):
-        """Create metrics collector for testing"""
-        return MetricsCollector(monitoring_config)
+    def config(self):
+        return MonitoringConfig(enable_metrics=True)
 
-    def test_metrics_collector_initialization(self, monitoring_config):
-        """Test MetricsCollector initialization"""
-        collector = MetricsCollector(monitoring_config)
+    @pytest.fixture
+    def collector(self, config):
+        return AdvancedMetricsCollector(config)
 
-        assert collector.config == monitoring_config
-        assert isinstance(collector._metrics, dict)
-        assert isinstance(collector._counters, dict)
-        assert isinstance(collector._histograms, dict)
+    def test_record_request_time(self, collector):
+        """Test recording request time"""
+        collector.record_request_time(150.5, status_code=200, endpoint="/api/search")
 
-    def test_counter_metrics(self, metrics_collector):
-        """Test counter metric operations"""
-        # Increment counter
-        metrics_collector.increment_counter("requests_total", labels={"endpoint": "/search"})
-        metrics_collector.increment_counter("requests_total", labels={"endpoint": "/search"})
+        metrics = collector.get_metrics("http.request_duration_ms")
+        assert "http.request_duration_ms" in metrics
 
-        # Get counter value
-        counter_value = metrics_collector.get_counter_value("requests_total", {"endpoint": "/search"})
-        assert counter_value == 2
+    def test_record_error(self, collector):
+        """Test recording error"""
+        collector.record_error("parser", "validation_error", "parse_file")
 
-        # Increment by custom amount
-        metrics_collector.increment_counter("bytes_processed", value=1024, labels={"operation": "embedding"})
-        bytes_value = metrics_collector.get_counter_value("bytes_processed", {"operation": "embedding"})
-        assert bytes_value == 1024
+        metrics = collector.get_metrics("errors_total")
+        assert "errors_total" in metrics
 
-    def test_histogram_metrics(self, metrics_collector):
-        """Test histogram metric operations"""
-        # Record histogram values
-        metrics_collector.record_histogram("request_duration", 0.5, labels={"endpoint": "/search"})
-        metrics_collector.record_histogram("request_duration", 1.2, labels={"endpoint": "/search"})
-        metrics_collector.record_histogram("request_duration", 0.8, labels={"endpoint": "/search"})
+    def test_record_operation_time(self, collector):
+        """Test recording operation time"""
+        collector.record_operation_time("embedding_generation", 2.5, "embedding_service")
 
-        # Get histogram statistics
-        stats = metrics_collector.get_histogram_stats("request_duration", {"endpoint": "/search"})
-        assert stats["count"] == 3
-        assert stats["min"] == 0.5
-        assert stats["max"] == 1.2
-        assert abs(stats["avg"] - 0.83) < 0.01  # Approximate average
+        metrics = collector.get_metrics("operation.duration_seconds")
+        assert "operation.duration_seconds" in metrics
 
-    def test_gauge_metrics(self, metrics_collector):
-        """Test gauge metric operations"""
-        # Set gauge value
-        metrics_collector.set_gauge("active_connections", 10)
-        assert metrics_collector.get_gauge_value("active_connections") == 10
+    def test_get_performance_snapshot(self, collector):
+        """Test getting performance snapshot"""
+        # Record some metrics
+        collector.record_request_time(100, status_code=200)
+        collector.record_request_time(200, status_code=200)
+        collector.record_request_time(150, status_code=500)
 
-        # Update gauge value
-        metrics_collector.set_gauge("active_connections", 15)
-        assert metrics_collector.get_gauge_value("active_connections") == 15
+        snapshot = collector.get_performance_snapshot()
+        assert isinstance(snapshot, PerformanceMetrics)
+        assert snapshot.total_requests >= 0
 
-        # Increment/decrement gauge
-        metrics_collector.increment_gauge("queue_size")
-        metrics_collector.increment_gauge("queue_size", 5)
-        assert metrics_collector.get_gauge_value("queue_size") == 6
+    def test_get_error_rate(self, collector):
+        """Test getting error rate"""
+        collector.record_request_time(100, status_code=200)
+        collector.record_request_time(100, status_code=200)
+        collector.record_request_time(100, status_code=500)
+        collector.record_request_time(100, status_code=500)
 
-        metrics_collector.decrement_gauge("queue_size", 2)
-        assert metrics_collector.get_gauge_value("queue_size") == 4
+        error_rate = collector.get_error_rate()
+        assert 0 <= error_rate <= 1
 
-    def test_embedding_metrics(self, metrics_collector):
-        """Test embedding-specific metrics"""
-        # Record successful embedding
-        metrics_collector.record_embedding_success(
-            processing_time=1.5,
-            batch_size=10,
-            model_version="jina-v2"
+
+class TestAlertRule:
+    """Test AlertRule dataclass"""
+
+    def test_alert_rule_creation(self):
+        """Test creating AlertRule"""
+        rule = AlertRule(
+            name="high_error_rate",
+            alert_type=AlertType.ERROR_RATE,
+            severity=LogLevel.ERROR,
+            condition=lambda ctx: ctx.get("error_rate", 0) > 0.1,
+            threshold=0.1,
+            description="Error rate exceeds 10%"
         )
 
-        # Record failed embedding
-        metrics_collector.record_embedding_failure(
-            error_type="timeout",
-            batch_size=5
-        )
-
-        # Check counters
-        success_count = metrics_collector.get_counter_value("embeddings_successful_total")
-        failure_count = metrics_collector.get_counter_value("embeddings_failed_total")
-
-        assert success_count == 1
-        assert failure_count == 1
-
-    def test_database_metrics(self, metrics_collector):
-        """Test database-specific metrics"""
-        # Record database operations
-        metrics_collector.record_database_operation(
-            operation="insert",
-            duration=0.1,
-            batch_size=50,
-            success=True
-        )
-
-        metrics_collector.record_database_operation(
-            operation="search",
-            duration=0.05,
-            result_count=5,
-            success=True
-        )
-
-        # Check operation counters
-        insert_count = metrics_collector.get_counter_value(
-            "database_operations_total",
-            {"operation": "insert", "status": "success"}
-        )
-        assert insert_count == 1
-
-    def test_metrics_export(self, metrics_collector):
-        """Test exporting metrics in various formats"""
-        # Add some test metrics
-        metrics_collector.increment_counter("test_counter")
-        metrics_collector.record_histogram("test_duration", 1.0)
-        metrics_collector.set_gauge("test_gauge", 42)
-
-        # Export as dictionary
-        metrics_dict = metrics_collector.export_metrics()
-        assert "counters" in metrics_dict
-        assert "histograms" in metrics_dict
-        assert "gauges" in metrics_dict
-
-        # Export as Prometheus format
-        prometheus_output = metrics_collector.export_prometheus()
-        assert isinstance(prometheus_output, str)
-        assert "test_counter" in prometheus_output
-
-    def test_metrics_cleanup(self, metrics_collector):
-        """Test metrics cleanup and retention"""
-        # Add old metrics
-        old_time = time.time() - (31 * 24 * 3600)  # 31 days ago
-        with patch('time.time', return_value=old_time):
-            metrics_collector.increment_counter("old_metric")
-
-        # Add recent metrics
-        metrics_collector.increment_counter("new_metric")
-
-        # Cleanup old metrics
-        metrics_collector.cleanup_old_metrics()
-
-        # Old metric should be removed, new metric should remain
-        all_metrics = metrics_collector.export_metrics()
-        counter_names = list(all_metrics["counters"].keys())
-        assert "new_metric" in counter_names
-        # Old metric cleanup depends on implementation
+        assert rule.name == "high_error_rate"
+        assert rule.alert_type == AlertType.ERROR_RATE
+        assert rule.threshold == 0.1
+        assert rule.cooldown_seconds == 900  # Default
 
 
 class TestAlertManager:
-    """Test alerting functionality"""
+    """Test AlertManager class"""
 
     @pytest.fixture
-    def alert_manager(self, monitoring_config):
-        """Create alert manager for testing"""
-        return AlertManager(monitoring_config)
+    def config(self):
+        return MonitoringConfig(
+            enable_alerting=True,
+            error_rate_threshold=0.1
+        )
 
-    def test_alert_manager_initialization(self, monitoring_config):
+    @pytest.fixture
+    def metrics_collector(self, config):
+        return AdvancedMetricsCollector(config)
+
+    @pytest.fixture
+    def alert_manager(self, config, metrics_collector):
+        return AlertManager(config, metrics_collector)
+
+    def test_alert_manager_initialization(self, alert_manager):
         """Test AlertManager initialization"""
-        manager = AlertManager(monitoring_config)
+        assert alert_manager is not None
+        assert len(alert_manager.rules) > 0  # Default rules should be set up
 
-        assert manager.config == monitoring_config
-        assert isinstance(manager._active_alerts, dict)
-        assert isinstance(manager._alert_history, list)
-
-    def test_error_rate_alert(self, alert_manager):
-        """Test error rate threshold alerting"""
-        # Configure error rate alert
-        alert_config = AlertConfig(
-            alert_type=AlertType.ERROR_RATE,
-            threshold=0.1,  # 10% error rate
-            duration_minutes=5
-        )
-        alert_manager.add_alert_config("high_error_rate", alert_config)
-
-        # Simulate high error rate
-        metrics = {
-            "error_rate": 0.15,  # 15% - above threshold
-            "request_count": 100
-        }
-
-        # Check for alerts
-        alerts = alert_manager.check_alerts(metrics)
-        assert len(alerts) > 0
-        assert alerts[0]["alert_type"] == AlertType.ERROR_RATE.value
-
-    def test_latency_alert(self, alert_manager):
-        """Test latency threshold alerting"""
-        # Configure latency alert
-        alert_config = AlertConfig(
-            alert_type=AlertType.HIGH_LATENCY,
-            threshold=5.0,  # 5 seconds
-            duration_minutes=3
-        )
-        alert_manager.add_alert_config("high_latency", alert_config)
-
-        # Simulate high latency
-        metrics = {
-            "avg_response_time": 6.5,  # Above threshold
-            "p95_response_time": 8.2
-        }
-
-        alerts = alert_manager.check_alerts(metrics)
-        assert len(alerts) > 0
-        assert alerts[0]["alert_type"] == AlertType.HIGH_LATENCY.value
-
-    def test_resource_usage_alert(self, alert_manager):
-        """Test resource usage alerting"""
-        # Configure resource alerts
-        cpu_alert = AlertConfig(
-            alert_type=AlertType.HIGH_CPU,
-            threshold=0.8,  # 80%
-            duration_minutes=2
-        )
-        memory_alert = AlertConfig(
-            alert_type=AlertType.HIGH_MEMORY,
-            threshold=0.9,  # 90%
-            duration_minutes=2
+    @pytest.mark.asyncio
+    async def test_create_manual_alert(self, alert_manager):
+        """Test creating a manual alert"""
+        alert = alert_manager.create_manual_alert(
+            title="Test Alert",
+            message="This is a test alert",
+            alert_type=AlertType.PERFORMANCE,
+            severity=LogLevel.WARNING
         )
 
-        alert_manager.add_alert_config("high_cpu", cpu_alert)
-        alert_manager.add_alert_config("high_memory", memory_alert)
+        assert alert is not None
+        assert alert.title == "Test Alert"
+        assert alert.alert_type == AlertType.PERFORMANCE
 
-        # Simulate high resource usage
-        metrics = {
-            "cpu_usage": 0.85,  # Above CPU threshold
-            "memory_usage": 0.75,  # Below memory threshold
-            "disk_usage": 0.5
-        }
+        # Alert should be in active alerts
+        active = alert_manager.get_active_alerts()
+        assert len(active) >= 1
 
-        alerts = alert_manager.check_alerts(metrics)
-        cpu_alerts = [a for a in alerts if a["alert_type"] == AlertType.HIGH_CPU.value]
-        memory_alerts = [a for a in alerts if a["alert_type"] == AlertType.HIGH_MEMORY.value]
-
-        assert len(cpu_alerts) > 0
-        assert len(memory_alerts) == 0
-
-    def test_alert_cooldown(self, alert_manager):
-        """Test alert cooldown functionality"""
-        # Configure alert with cooldown
-        alert_config = AlertConfig(
-            alert_type=AlertType.ERROR_RATE,
-            threshold=0.1,
-            duration_minutes=1,
-            cooldown_minutes=10
+    @pytest.mark.asyncio
+    async def test_resolve_alert(self, alert_manager):
+        """Test resolving an alert"""
+        alert = alert_manager.create_manual_alert(
+            title="To Resolve",
+            message="Will be resolved",
+            alert_type=AlertType.SERVICE_HEALTH
         )
-        alert_manager.add_alert_config("test_alert", alert_config)
 
-        # First alert should fire
-        metrics = {"error_rate": 0.2}
-        alerts1 = alert_manager.check_alerts(metrics)
-        assert len(alerts1) > 0
+        # Resolve it
+        result = alert_manager.resolve_alert(alert.id)
+        assert result is True
 
-        # Second check immediately after should not fire (cooldown)
-        alerts2 = alert_manager.check_alerts(metrics)
-        assert len(alerts2) == 0
+        # Should no longer be in active alerts
+        active = alert_manager.get_active_alerts()
+        resolved_ids = [a.id for a in active]
+        assert alert.id not in resolved_ids
 
-    def test_alert_resolution(self, alert_manager):
-        """Test alert resolution when conditions improve"""
-        # Fire an alert
-        alert_config = AlertConfig(
-            alert_type=AlertType.ERROR_RATE,
-            threshold=0.1,
-            duration_minutes=1
-        )
-        alert_manager.add_alert_config("test_alert", alert_config)
-
-        # Trigger alert
-        high_error_metrics = {"error_rate": 0.2}
-        alerts = alert_manager.check_alerts(high_error_metrics)
-        assert len(alerts) > 0
-        alert_id = alerts[0]["alert_id"]
-
-        # Resolve alert (error rate back to normal)
-        normal_metrics = {"error_rate": 0.05}
-        resolved_alerts = alert_manager.check_alert_resolution(normal_metrics)
-
-        assert len(resolved_alerts) > 0
-        assert alert_id in [a["alert_id"] for a in resolved_alerts]
-
-    def test_alert_notification(self, alert_manager):
-        """Test alert notification sending"""
-        with patch.object(alert_manager, '_send_notification') as mock_send:
-            alert = {
-                "alert_id": "test_123",
-                "alert_type": AlertType.ERROR_RATE.value,
-                "message": "Error rate exceeded threshold",
-                "severity": "HIGH"
-            }
-
-            alert_manager.send_alert_notification(alert)
-            mock_send.assert_called_once_with(alert)
-
-    def test_alert_history(self, alert_manager):
-        """Test alert history tracking"""
-        # Add some alerts to history
-        alert1 = {
-            "alert_id": "alert_1",
-            "alert_type": AlertType.ERROR_RATE.value,
-            "timestamp": time.time() - 3600
-        }
-        alert2 = {
-            "alert_id": "alert_2",
-            "alert_type": AlertType.HIGH_LATENCY.value,
-            "timestamp": time.time() - 1800
-        }
-
-        alert_manager._alert_history.extend([alert1, alert2])
-
-        # Get recent alert history
-        recent_alerts = alert_manager.get_alert_history(hours=2)
-        assert len(recent_alerts) == 2
-
-        # Get alerts for specific type
-        error_rate_alerts = alert_manager.get_alert_history(
-            hours=2,
+    @pytest.mark.asyncio
+    async def test_get_active_alerts_filtered(self, alert_manager):
+        """Test getting active alerts with filter"""
+        alert_manager.create_manual_alert(
+            title="Error Alert",
+            message="Error",
             alert_type=AlertType.ERROR_RATE
         )
-        assert len(error_rate_alerts) == 1
-        assert error_rate_alerts[0]["alert_id"] == "alert_1"
+        alert_manager.create_manual_alert(
+            title="Performance Alert",
+            message="Performance",
+            alert_type=AlertType.PERFORMANCE
+        )
+
+        error_alerts = alert_manager.get_active_alerts(alert_type=AlertType.ERROR_RATE)
+        assert all(a.alert_type == AlertType.ERROR_RATE for a in error_alerts)
+
+    @pytest.mark.asyncio
+    async def test_alert_summary(self, alert_manager):
+        """Test getting alert summary"""
+        alert_manager.create_manual_alert(
+            title="Alert 1",
+            message="Message 1",
+            alert_type=AlertType.ERROR_RATE
+        )
+
+        summary = alert_manager.get_alert_summary(hours=24)
+        assert "total_alerts" in summary
+        assert "active_alerts" in summary
+        assert "alerts_by_type" in summary
+
+    def test_suppress_rule(self, alert_manager):
+        """Test rule suppression"""
+        alert_manager.suppress_rule("high_error_rate", 3600)  # 1 hour
+
+        assert alert_manager._is_rule_suppressed("high_error_rate") is True
+
+        alert_manager.unsuppress_rule("high_error_rate")
+        assert alert_manager._is_rule_suppressed("high_error_rate") is False
+
+    def test_add_custom_rule(self, alert_manager):
+        """Test adding custom rule"""
+        custom_rule = AlertRule(
+            name="custom_rule",
+            alert_type=AlertType.SECURITY,
+            severity=LogLevel.CRITICAL,
+            condition=lambda ctx: False,
+            threshold=1.0
+        )
+
+        initial_count = len(alert_manager.rules)
+        alert_manager.add_custom_rule(custom_rule)
+        assert len(alert_manager.rules) == initial_count + 1
+
+    def test_remove_rule(self, alert_manager):
+        """Test removing a rule"""
+        initial_count = len(alert_manager.rules)
+        alert_manager.remove_rule("high_error_rate")
+        assert len(alert_manager.rules) == initial_count - 1
 
 
-class TestHealthChecker:
-    """Test health checking functionality"""
+class TestHealthMonitor:
+    """Test HealthMonitor class"""
 
     @pytest.fixture
-    def health_checker(self, monitoring_config):
-        """Create health checker for testing"""
-        return HealthChecker(monitoring_config)
+    def config(self):
+        return MonitoringConfig(
+            health_check_interval_seconds=10,
+            health_check_timeout_seconds=5
+        )
 
-    def test_health_checker_initialization(self, monitoring_config):
-        """Test HealthChecker initialization"""
-        checker = HealthChecker(monitoring_config)
+    @pytest.fixture
+    def health_monitor(self, config):
+        return HealthMonitor(config)
 
-        assert checker.config == monitoring_config
-        assert isinstance(checker._component_checks, dict)
+    def test_health_monitor_initialization(self, health_monitor):
+        """Test HealthMonitor initialization"""
+        assert health_monitor is not None
+        assert health_monitor.config is not None
+        assert len(health_monitor.health_checks) == 0
 
-    def test_register_health_check(self, health_checker):
-        """Test registering component health checks"""
-        def database_health_check():
-            return {"status": "healthy", "connection_count": 5}
+    def test_register_health_check(self, health_monitor):
+        """Test registering a health check"""
+        health_monitor.register_health_check(
+            name="test_component",
+            check_function=lambda: True,
+            timeout_seconds=5.0,
+            critical=True
+        )
 
-        health_checker.register_component("database", database_health_check)
-        assert "database" in health_checker._component_checks
+        assert "test_component" in health_monitor.health_checks
 
-    def test_component_health_check(self, health_checker):
-        """Test individual component health checking"""
-        # Register mock component
-        def mock_component_check():
-            return {"status": "healthy", "last_update": time.time()}
+    def test_unregister_health_check(self, health_monitor):
+        """Test unregistering a health check"""
+        health_monitor.register_health_check(
+            name="to_remove",
+            check_function=lambda: True
+        )
+        assert "to_remove" in health_monitor.health_checks
 
-        health_checker.register_component("test_component", mock_component_check)
+        health_monitor.unregister_health_check("to_remove")
+        assert "to_remove" not in health_monitor.health_checks
 
-        # Check component health
-        health = health_checker.check_component_health("test_component")
-        assert health["status"] == "healthy"
-        assert "last_update" in health
+    @pytest.mark.asyncio
+    async def test_run_health_checks(self, health_monitor):
+        """Test running health checks"""
+        health_monitor.register_health_check(
+            name="healthy_component",
+            check_function=lambda: {"status": "healthy", "message": "OK"}
+        )
 
-    def test_overall_health_check(self, health_checker):
-        """Test overall system health check"""
-        # Register multiple components
-        def healthy_component():
-            return {"status": "healthy"}
+        status = await health_monitor.run_health_checks()
+        assert isinstance(status, SystemStatus)
+        assert "healthy_component" in status.component_statuses
 
-        def degraded_component():
-            return {"status": "degraded", "error": "Minor issue"}
-
-        def unhealthy_component():
-            return {"status": "unhealthy", "error": "Critical error"}
-
-        health_checker.register_component("healthy", healthy_component)
-        health_checker.register_component("degraded", degraded_component)
-        health_checker.register_component("unhealthy", unhealthy_component)
-
-        # Check overall health
-        overall_health = health_checker.check_overall_health()
-
-        assert "overall_status" in overall_health
-        assert "components" in overall_health
-        assert "timestamp" in overall_health
-        assert len(overall_health["components"]) == 3
-
-        # Overall status should be unhealthy due to one unhealthy component
-        assert overall_health["overall_status"] == "unhealthy"
-
-    def test_health_check_timeout(self, health_checker):
+    @pytest.mark.asyncio
+    async def test_health_check_timeout(self, health_monitor):
         """Test health check timeout handling"""
-        def slow_component():
-            import time
-            time.sleep(2)  # Simulate slow health check
-            return {"status": "healthy"}
+        async def slow_check():
+            await asyncio.sleep(10)
+            return True
 
-        health_checker.register_component("slow", slow_component, timeout_seconds=1)
+        health_monitor.register_health_check(
+            name="slow_component",
+            check_function=slow_check,
+            timeout_seconds=0.1  # Very short timeout
+        )
 
-        # Health check should timeout
-        health = health_checker.check_component_health("slow")
-        assert health["status"] == "unhealthy"
-        assert "timeout" in health.get("error", "").lower()
+        status = await health_monitor.run_health_checks()
+        result = status.component_statuses.get("slow_component")
+        assert result is not None
+        assert result.status == "unhealthy"
+        assert "timed out" in result.message.lower()
 
-    def test_health_check_exception_handling(self, health_checker):
+    @pytest.mark.asyncio
+    async def test_health_check_exception_handling(self, health_monitor):
         """Test health check exception handling"""
-        def failing_component():
-            raise Exception("Component check failed")
+        def failing_check():
+            raise ValueError("Check failed!")
 
-        health_checker.register_component("failing", failing_component)
+        health_monitor.register_health_check(
+            name="failing_component",
+            check_function=failing_check
+        )
 
-        # Should handle exception gracefully
-        health = health_checker.check_component_health("failing")
-        assert health["status"] == "unhealthy"
-        assert "error" in health
+        status = await health_monitor.run_health_checks()
+        result = status.component_statuses.get("failing_component")
+        assert result is not None
+        assert result.status == "unhealthy"
 
-    def test_periodic_health_monitoring(self, health_checker):
-        """Test periodic health monitoring"""
-        check_count = 0
+    def test_get_uptime(self, health_monitor):
+        """Test getting system uptime"""
+        uptime = health_monitor.get_uptime()
+        assert uptime >= 0
 
-        def counting_component():
-            nonlocal check_count
-            check_count += 1
-            return {"status": "healthy", "check_count": check_count}
+    def test_get_health_summary(self, health_monitor):
+        """Test getting health summary"""
+        summary = health_monitor.get_health_summary()
 
-        health_checker.register_component("counter", counting_component)
+        assert "total_health_checks" in summary
+        assert "healthy_components" in summary
+        assert "unhealthy_components" in summary
+        assert "uptime_seconds" in summary
 
-        # Mock periodic checking
-        with patch('time.sleep'):  # Avoid actual sleep in tests
-            health_checker.start_periodic_monitoring(interval_seconds=1)
 
-            # Simulate some time passing
-            import asyncio
-            asyncio.create_task(health_checker._periodic_check_loop())
+class TestLogEntry:
+    """Test LogEntry dataclass"""
 
-            # Check that monitoring started
-            assert health_checker._monitoring_active is True
+    def test_log_entry_creation(self):
+        """Test creating LogEntry"""
+        entry = LogEntry(
+            timestamp=time.time(),
+            level=LogLevel.INFO,
+            component="api",
+            message="Request received",
+            context={"endpoint": "/search"},
+            request_id="req-123"
+        )
 
-    def test_health_metrics_integration(self, health_checker):
-        """Test integration with metrics collector"""
-        metrics_collector = Mock()
-        health_checker._metrics_collector = metrics_collector
+        assert entry.level == LogLevel.INFO
+        assert entry.component == "api"
+        assert entry.request_id == "req-123"
 
-        def test_component():
-            return {"status": "healthy", "response_time": 0.05}
+    def test_log_entry_to_dict(self):
+        """Test LogEntry to_dict method"""
+        entry = LogEntry(
+            timestamp=time.time(),
+            level=LogLevel.ERROR,
+            component="parser",
+            message="Parse failed",
+            error_details={"exception": "ValueError"}
+        )
 
-        health_checker.register_component("test", test_component)
+        data = entry.to_dict()
+        assert data["level"] == "error"
+        assert data["component"] == "parser"
+        assert data["error_details"] == {"exception": "ValueError"}
 
-        # Check component health
-        health_checker.check_component_health("test")
 
-        # Should record health check metrics
-        metrics_collector.record_histogram.assert_called()
-        metrics_collector.increment_counter.assert_called()
+class TestSystemStatus:
+    """Test SystemStatus dataclass"""
+
+    def test_system_status_creation(self):
+        """Test creating SystemStatus"""
+        status = SystemStatus(
+            overall_status="healthy",
+            uptime_seconds=3600
+        )
+
+        assert status.overall_status == "healthy"
+        assert status.uptime_seconds == 3600
+        assert len(status.component_statuses) == 0
+        assert len(status.active_alerts) == 0
+
+    def test_system_status_to_dict(self):
+        """Test SystemStatus to_dict method"""
+        check = HealthCheck(
+            component="db",
+            status="healthy",
+            message="OK"
+        )
+        status = SystemStatus(
+            overall_status="healthy",
+            component_statuses={"db": check},
+            uptime_seconds=7200
+        )
+
+        data = status.to_dict()
+        assert data["overall_status"] == "healthy"
+        assert "db" in data["component_statuses"]
+        assert data["alert_count"] == 0

@@ -398,7 +398,7 @@ class LargeService:
 class TestPerformance:
     """Performance tests for Python parsing"""
 
-    def test_parse_large_file(self):
+    def test_parse_large_file(self, tmp_path):
         """Test parsing performance with a large file"""
         # Generate a large Python file
         large_content = '''
@@ -443,24 +443,21 @@ class Service{i}:
         config = ParserConfig(min_tokens=10, max_tokens=500)
         parser = PythonParser(config)
 
-        with tempfile.NamedTemporaryFile(suffix='.py', delete=False, mode='w') as f:
-            f.write(large_content)
-            f.flush()
+        # Use tmp_path fixture instead of NamedTemporaryFile for Windows compatibility
+        test_file = tmp_path / "large_test.py"
+        test_file.write_text(large_content)
 
-            # Parse the file
-            import time
-            start = time.time()
-            result = parser.parse_file(Path(f.name))
-            elapsed = time.time() - start
+        # Parse the file
+        import time
+        start = time.time()
+        result = parser.parse_file(test_file)
+        elapsed = time.time() - start
 
-            assert result is not None
-            assert len(result.chunks) > 0
+        assert result is not None
+        assert len(result.chunks) > 0
 
-            # Should complete in reasonable time (< 5 seconds)
-            assert elapsed < 5.0
-
-            # Clean up
-            os.unlink(f.name)
+        # Should complete in reasonable time (< 5 seconds)
+        assert elapsed < 5.0
 
 
 if __name__ == '__main__':
