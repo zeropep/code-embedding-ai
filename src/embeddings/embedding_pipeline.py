@@ -1,5 +1,5 @@
 import asyncio
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import structlog
 
 from .embedding_service import EmbeddingService
@@ -8,6 +8,8 @@ from ..code_parser.code_parser import CodeParser
 from ..code_parser.models import ParserConfig, CodeChunk
 from ..security.security_scanner import SecurityScanner
 from ..security.models import SecurityConfig
+from ..database.vector_store import VectorStore
+from ..database.models import VectorDBConfig
 
 
 logger = structlog.get_logger(__name__)
@@ -19,19 +21,24 @@ class EmbeddingPipeline:
     def __init__(self,
                  parser_config: ParserConfig = None,
                  security_config: SecurityConfig = None,
-                 embedding_config: EmbeddingConfig = None):
+                 embedding_config: EmbeddingConfig = None,
+                 vector_config: VectorDBConfig = None,
+                 auto_save: bool = True):
 
         # Initialize configurations
         self.parser_config = parser_config or ParserConfig()
         self.security_config = security_config or SecurityConfig()
         self.embedding_config = embedding_config or EmbeddingConfig()
+        self.vector_config = vector_config or VectorDBConfig()
+        self.auto_save = auto_save
 
         # Initialize components
         self.code_parser = CodeParser(self.parser_config)
         self.security_scanner = SecurityScanner(self.security_config)
         self.embedding_service = EmbeddingService(self.embedding_config)
+        self.vector_store = VectorStore(self.vector_config)
 
-        logger.info("EmbeddingPipeline initialized")
+        logger.info("EmbeddingPipeline initialized", auto_save=auto_save)
 
     async def process_repository(self, repo_path: str) -> Dict[str, Any]:
         """Process entire repository through the pipeline"""
@@ -68,8 +75,20 @@ class EmbeddingPipeline:
             finally:
                 await self.embedding_service.stop()
 
-            # Step 4: Compile results
-            logger.info("Step 4: Compiling results")
+            # Step 4: Store in database (if auto_save enabled)
+            if self.auto_save:
+                logger.info("Step 4: Storing in database")
+                if not self.vector_store.connect():
+                    logger.error("Failed to connect to vector database")
+                    return self._create_error_result("Failed to connect to vector database")
+
+                store_result = self.vector_store.store_chunks(embedded_chunks)
+                logger.info("Database storage completed",
+                          stored_chunks=store_result.successful_items,
+                          failed=store_result.failed_items)
+
+            # Step 5: Compile results
+            logger.info("Step 5: Compiling results")
             result = self._compile_pipeline_result(
                 repo_path, parsed_files, all_chunks, secured_chunks, embedded_chunks
             )
@@ -112,6 +131,18 @@ class EmbeddingPipeline:
                 embedded_chunks = await self.embedding_service.generate_chunk_embeddings(secured_chunks)
             finally:
                 await self.embedding_service.stop()
+
+            # Step 4: Store in database (if auto_save enabled)
+            if self.auto_save:
+                logger.info("Storing in database")
+                if not self.vector_store.connect():
+                    logger.error("Failed to connect to vector database")
+                    return self._create_error_result("Failed to connect to vector database")
+
+                store_result = self.vector_store.store_chunks(embedded_chunks)
+                logger.info("Database storage completed",
+                          stored_chunks=store_result.successful_items,
+                          failed=store_result.failed_items)
 
             # Compile results
             result = self._compile_pipeline_result(

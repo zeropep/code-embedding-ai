@@ -325,20 +325,20 @@ class VectorStore:
             # Generate unique chunk ID if not present
             chunk_id = embedding_data.get('embedding_id', str(uuid.uuid4()))
 
-            # Create metadata object
+            # Create metadata object (filter out None values for ChromaDB compatibility)
             metadata = ChunkMetadata(
                 chunk_id=chunk_id,
                 file_path=chunk.file_path,
                 language=chunk.language.value,
                 start_line=chunk.start_line,
                 end_line=chunk.end_line,
-                function_name=chunk.function_name,
-                class_name=chunk.class_name,
+                function_name=chunk.function_name or "",
+                class_name=chunk.class_name or "",
                 layer_type=chunk.layer_type.value,
                 token_count=chunk.token_count,
                 sensitivity_level=chunk.metadata.get('security', {}).get('sensitivity_level', 'LOW'),
-                file_hash=chunk.metadata.get('file_hash'),
-                embedding_model=embedding_data.get('model_version', 'jina-code-embeddings-1.5b'),
+                file_hash=chunk.metadata.get('file_hash', ""),
+                embedding_model=embedding_data.get('model_version', 'jina-embeddings-v2-base-code'),
                 embedding_dimensions=len(embedding_vector)
             )
 

@@ -54,7 +54,9 @@ class ServiceManager:
             self.embedding_pipeline = EmbeddingPipeline(
                 parser_config=parser_config,
                 security_config=security_config,
-                embedding_config=embedding_config
+                embedding_config=embedding_config,
+                vector_config=vector_config,
+                auto_save=True
             )
 
             # Initialize update service
