@@ -339,7 +339,9 @@ class VectorStore:
                 sensitivity_level=chunk.metadata.get('security', {}).get('sensitivity_level', 'LOW'),
                 file_hash=chunk.metadata.get('file_hash', ""),
                 embedding_model=embedding_data.get('model_version', 'jina-embeddings-v2-base-code'),
-                embedding_dimensions=len(embedding_vector)
+                embedding_dimensions=len(embedding_vector),
+                project_id=chunk.project_id or "default",
+                project_name=chunk.project_name or "default"
             )
 
             return StoredChunk(
@@ -384,3 +386,127 @@ class VectorStore:
         """Search chunks by sensitivity level"""
         filters = {"sensitivity_level": sensitivity_level}
         return self.search_by_metadata(filters, limit=top_k)
+
+    def get_all_projects(self) -> List[Dict[str, Any]]:
+        """Get list of all projects in the database"""
+        if not self._ensure_connected():
+            return []
+
+        try:
+            # Get all chunks and extract unique project_ids
+            # This is not the most efficient way, but works for now
+            # TODO: Optimize with direct ChromaDB query if possible
+            all_results = self.client.collection.get(
+                include=["metadatas"]
+            )
+
+            if not all_results.get('metadatas'):
+                return []
+
+            # Extract unique projects
+            projects_dict = {}
+            for metadata in all_results['metadatas']:
+                project_id = metadata.get('project_id', 'default')
+                project_name = metadata.get('project_name', 'default')
+
+                if project_id not in projects_dict:
+                    projects_dict[project_id] = {
+                        'id': project_id,
+                        'name': project_name,
+                        'chunk_count': 0
+                    }
+                projects_dict[project_id]['chunk_count'] += 1
+
+            projects = list(projects_dict.values())
+            logger.debug("Retrieved projects", count=len(projects))
+            return projects
+
+        except Exception as e:
+            logger.error("Failed to get projects", error=str(e))
+            return []
+
+    def get_project_stats(self, project_id: str) -> Dict[str, Any]:
+        """Get statistics for a specific project"""
+        if not self._ensure_connected():
+            return {}
+
+        try:
+            # Special handling for default project: if project_id is "default",
+            # get all chunks (including those without project_id metadata)
+            if project_id == "default":
+                # Get all chunks
+                results = self.client.collection.get(
+                    include=["metadatas"]
+                )
+
+                # Filter for chunks that either don't have project_id or have project_id="default"
+                filtered_metadatas = []
+                for metadata in results.get('metadatas', []):
+                    chunk_project_id = metadata.get('project_id', 'default')
+                    if chunk_project_id == 'default':
+                        filtered_metadatas.append(metadata)
+
+                results['metadatas'] = filtered_metadatas
+            else:
+                # Get chunks for specific project
+                results = self.client.collection.get(
+                    where={"project_id": project_id},
+                    include=["metadatas"]
+                )
+
+            if not results.get('metadatas'):
+                return {
+                    'project_id': project_id,
+                    'total_chunks': 0,
+                    'total_files': 0,
+                    'languages': {},
+                    'layer_types': {},
+                    'error': 'Project not found'
+                }
+
+            # Analyze metadata
+            file_paths = set()
+            languages = {}
+            layer_types = {}
+            total_tokens = 0
+            project_name = 'Unknown'
+
+            for metadata in results['metadatas']:
+                # Count files
+                file_path = metadata.get('file_path')
+                if file_path:
+                    file_paths.add(file_path)
+
+                # Count languages
+                lang = metadata.get('language', 'unknown')
+                languages[lang] = languages.get(lang, 0) + 1
+
+                # Count layer types
+                layer = metadata.get('layer_type', 'Unknown')
+                layer_types[layer] = layer_types.get(layer, 0) + 1
+
+                # Sum tokens
+                total_tokens += metadata.get('token_count', 0)
+
+                # Get project name
+                if metadata.get('project_name'):
+                    project_name = metadata['project_name']
+
+            stats = {
+                'project_id': project_id,
+                'project_name': project_name,
+                'total_chunks': len(results['metadatas']),
+                'total_files': len(file_paths),
+                'total_tokens': total_tokens,
+                'avg_tokens_per_chunk': total_tokens / len(results['metadatas']) if results['metadatas'] else 0,
+                'languages': languages,
+                'layer_types': layer_types,
+                'last_updated': max((m.get('last_updated', 0) for m in results['metadatas']), default=0)
+            }
+
+            logger.debug("Retrieved project stats", project_id=project_id, total_chunks=stats['total_chunks'])
+            return stats
+
+        except Exception as e:
+            logger.error("Failed to get project stats", project_id=project_id, error=str(e))
+            return {'project_id': project_id, 'error': str(e)}

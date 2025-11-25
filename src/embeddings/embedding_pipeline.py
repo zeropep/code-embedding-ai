@@ -40,9 +40,9 @@ class EmbeddingPipeline:
 
         logger.info("EmbeddingPipeline initialized", auto_save=auto_save)
 
-    async def process_repository(self, repo_path: str) -> Dict[str, Any]:
+    async def process_repository(self, repo_path: str, project_id: Optional[str] = None, project_name: Optional[str] = None) -> Dict[str, Any]:
         """Process entire repository through the pipeline"""
-        logger.info("Starting repository processing", repo_path=repo_path)
+        logger.info("Starting repository processing", repo_path=repo_path, project_id=project_id, project_name=project_name)
 
         try:
             # Step 1: Parse repository
@@ -57,6 +57,12 @@ class EmbeddingPipeline:
             all_chunks = []
             for parsed_file in parsed_files:
                 all_chunks.extend(parsed_file.chunks)
+
+            # Set project metadata on all chunks
+            if project_id or project_name:
+                for chunk in all_chunks:
+                    chunk.project_id = project_id
+                    chunk.project_name = project_name
 
             logger.info("Parsing completed",
                         total_files=len(parsed_files),
@@ -105,9 +111,9 @@ class EmbeddingPipeline:
             logger.error("Repository processing failed", repo_path=repo_path, error=str(e))
             return self._create_error_result(str(e))
 
-    async def process_files(self, file_paths: List[str]) -> Dict[str, Any]:
+    async def process_files(self, file_paths: List[str], project_id: Optional[str] = None, project_name: Optional[str] = None) -> Dict[str, Any]:
         """Process specific files through the pipeline"""
-        logger.info("Starting file processing", file_count=len(file_paths))
+        logger.info("Starting file processing", file_count=len(file_paths), project_id=project_id, project_name=project_name)
 
         try:
             # Step 1: Parse files
@@ -120,6 +126,12 @@ class EmbeddingPipeline:
             all_chunks = []
             for parsed_file in parsed_files:
                 all_chunks.extend(parsed_file.chunks)
+
+            # Set project metadata on all chunks
+            if project_id or project_name:
+                for chunk in all_chunks:
+                    chunk.project_id = project_id
+                    chunk.project_name = project_name
 
             # Step 2: Security scanning
             secured_chunks = self.security_scanner.scan_chunks(all_chunks)

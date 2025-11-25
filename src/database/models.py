@@ -62,6 +62,8 @@ class ChunkMetadata:
     last_updated: float = None
     embedding_model: str = "jina-code-embeddings-1.5b"
     embedding_dimensions: int = 1024
+    project_id: str = "default"
+    project_name: str = "default"
 
     def __post_init__(self):
         if self.last_updated is None:
@@ -82,7 +84,9 @@ class ChunkMetadata:
             "file_hash": self.file_hash or "",
             "last_updated": self.last_updated,
             "embedding_model": self.embedding_model,
-            "embedding_dimensions": self.embedding_dimensions
+            "embedding_dimensions": self.embedding_dimensions,
+            "project_id": self.project_id,
+            "project_name": self.project_name
         }
 
     @classmethod

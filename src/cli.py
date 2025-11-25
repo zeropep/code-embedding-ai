@@ -71,12 +71,16 @@ def process():
 @click.option("--exclude", multiple=True, help="File patterns to exclude")
 @click.option("--no-security", is_flag=True, help="Disable security scanning")
 @click.option("--batch-size", default=20, help="Batch size for processing")
+@click.option("--project-id", default=None, help="Project ID for multi-project support")
+@click.option("--project-name", default=None, help="Project name for multi-project support")
 @click.pass_context
-def process_repository(ctx, repo_path, output_db, force, include, exclude, no_security, batch_size):
+def process_repository(ctx, repo_path, output_db, force, include, exclude, no_security, batch_size, project_id, project_name):
     """Process an entire repository to generate embeddings"""
     async def _process():
         try:
             click.echo(f"[PROCESSING] Repository: {repo_path}")
+            if project_id or project_name:
+                click.echo(f"[PROJECT] ID: {project_id}, Name: {project_name}")
             start_time = time.time()
 
             # Create configurations
@@ -92,7 +96,7 @@ def process_repository(ctx, repo_path, output_db, force, include, exclude, no_se
             )
 
             # Process repository
-            result = await pipeline.process_repository(repo_path)
+            result = await pipeline.process_repository(repo_path, project_id=project_id, project_name=project_name)
 
             processing_time = time.time() - start_time
 
@@ -129,15 +133,19 @@ def process_repository(ctx, repo_path, output_db, force, include, exclude, no_se
 @process.command("files")
 @click.argument("files", nargs=-1, required=True, type=click.Path(exists=True, file_okay=True))
 @click.option("--output-db", default="./embeddings.db", help="Output ChromaDB path")
+@click.option("--project-id", default=None, help="Project ID for multi-project support")
+@click.option("--project-name", default=None, help="Project name for multi-project support")
 @click.pass_context
-def process_files(ctx, files, output_db):
+def process_files(ctx, files, output_db, project_id, project_name):
     """Process specific files"""
     async def _process():
         try:
             click.echo(f"[PROCESSING] {len(files)} file(s)")
+            if project_id or project_name:
+                click.echo(f"[PROJECT] ID: {project_id}, Name: {project_name}")
 
             pipeline = EmbeddingPipeline()
-            result = await pipeline.process_files(list(files))
+            result = await pipeline.process_files(list(files), project_id=project_id, project_name=project_name)
 
             if result["status"] == "success":
                 click.echo("[OK] Files processed successfully!")

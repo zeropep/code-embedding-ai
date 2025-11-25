@@ -51,6 +51,8 @@ class CodeChunk:
     layer_type: LayerType = LayerType.UNKNOWN
     token_count: int = 0
     metadata: Dict[str, Any] = None
+    project_id: Optional[str] = None
+    project_name: Optional[str] = None
 
     def __post_init__(self):
         if self.metadata is None:
@@ -74,7 +76,9 @@ class CodeChunk:
             "class_name": self.class_name,
             "layer_type": self.layer_type.value,
             "token_count": self.token_count,
-            "metadata": self.metadata
+            "metadata": self.metadata,
+            "project_id": self.project_id,
+            "project_name": self.project_name
         }
 
 

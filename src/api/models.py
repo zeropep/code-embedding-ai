@@ -43,6 +43,7 @@ class SearchRequest(BaseModel):
     top_k: int = Field(default=10, ge=1, le=100, description="Number of results to return")
     min_similarity: float = Field(default=0.0, ge=0.0, le=1.0, description="Minimum similarity score")
     filters: Optional[Dict[str, Any]] = Field(default=None, description="Metadata filters")
+    project_id: Optional[str] = Field(default=None, description="Filter by specific project ID")
     include_content: bool = Field(default=True, description="Include code content in results")
     include_embeddings: bool = Field(default=False, description="Include embedding vectors in results")
 
@@ -236,6 +237,7 @@ class SimilarCodeRequest(BaseModel):
     top_k: int = Field(default=10, ge=1, le=100)
     min_similarity: float = Field(default=0.7, ge=0.0, le=1.0)
     include_same_file: bool = Field(default=False, description="Include results from the same file")
+    project_id: Optional[str] = Field(default=None, description="Filter by specific project ID")
 
 
 # Administrative Models
@@ -271,3 +273,32 @@ class ProgressUpdate(BaseModel):
     total_steps: int
     current_step_num: int
     estimated_time_remaining: Optional[float] = None
+
+
+# Project Management Models
+class ProjectInfo(BaseModel):
+    id: str = Field(..., description="Unique project identifier")
+    name: str = Field(..., description="Project name")
+    chunk_count: int = Field(..., description="Number of chunks in this project")
+
+
+class ProjectListResponse(BaseModel):
+    status: RequestStatus = RequestStatus.SUCCESS
+    message: str
+    projects: List[ProjectInfo]
+    total_projects: int
+    timestamp: float = Field(default_factory=time.time)
+
+
+class ProjectStatsResponse(BaseModel):
+    status: RequestStatus = RequestStatus.SUCCESS
+    project_id: str
+    project_name: str
+    total_chunks: int
+    total_files: int
+    total_tokens: int
+    avg_tokens_per_chunk: float
+    languages: Dict[str, int] = Field(..., description="Distribution of programming languages")
+    layer_types: Dict[str, int] = Field(..., description="Distribution of layer types")
+    last_updated: float
+    timestamp: float = Field(default_factory=time.time)

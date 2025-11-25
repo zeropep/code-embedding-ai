@@ -8,7 +8,8 @@ from .models import (
     HealthCheckResponse, SearchResponse, SearchRequest, SearchResult,
     RequestStatus, SimilarCodeRequest, ProcessRepositoryResponse,
     ProcessRepositoryRequest, ProcessingMode, BatchProcessRequest,
-    SystemStatusResponse, MetricsResponse, BatchDeleteRequest
+    SystemStatusResponse, MetricsResponse, BatchDeleteRequest,
+    ProjectListResponse, ProjectStatsResponse, ProjectInfo
 )
 from .dependencies import get_embedding_pipeline, get_update_service, get_vector_store
 from ..embeddings.embedding_pipeline import EmbeddingPipeline
@@ -25,6 +26,7 @@ search_router = APIRouter(prefix="/search", tags=["search"])
 process_router = APIRouter(prefix="/process", tags=["processing"])
 admin_router = APIRouter(prefix="/admin", tags=["administration"])
 status_router = APIRouter(prefix="/status", tags=["status"])
+projects_router = APIRouter(prefix="/projects", tags=["projects"])
 
 
 # Main Routes
@@ -123,12 +125,17 @@ async def semantic_search(
         finally:
             await pipeline.embedding_service.stop()
 
+        # Prepare filters with project_id if specified
+        filters = request.filters or {}
+        if request.project_id:
+            filters["project_id"] = request.project_id
+
         # Perform vector search
         search_results = vector_store.search_similar_chunks(
             query_vector=query_vector,
             top_k=request.top_k,
             min_similarity=request.min_similarity,
-            filters=request.filters
+            filters=filters if filters else None
         )
 
         # Convert to response format
@@ -263,11 +270,17 @@ async def find_similar_code(
         finally:
             await pipeline.embedding_service.stop()
 
+        # Prepare filters with project_id if specified
+        filters = {}
+        if request.project_id:
+            filters["project_id"] = request.project_id
+
         # Search for similar code
         search_results = vector_store.search_similar_chunks(
             query_vector=query_vector,
             top_k=request.top_k,
-            min_similarity=request.min_similarity
+            min_similarity=request.min_similarity,
+            filters=filters if filters else None
         )
 
         # Filter results if needed
@@ -541,11 +554,95 @@ async def reset_database(
         raise HTTPException(status_code=500, detail=f"Reset failed: {str(e)}")
 
 
+# Project Routes
+@projects_router.get("/", response_model=ProjectListResponse)
+async def list_projects(
+    vector_store: VectorStore = Depends(get_vector_store)
+):
+    """Get list of all projects in the database"""
+    try:
+        start_time = time.time()
+
+        logger.info("Listing all projects")
+
+        projects_data = vector_store.get_all_projects()
+
+        # Convert to ProjectInfo models
+        projects = [
+            ProjectInfo(
+                id=project['id'],
+                name=project['name'],
+                chunk_count=project['chunk_count']
+            )
+            for project in projects_data
+        ]
+
+        logger.info("Projects listed", total_projects=len(projects))
+
+        return ProjectListResponse(
+            status=RequestStatus.SUCCESS,
+            message=f"Found {len(projects)} projects",
+            projects=projects,
+            total_projects=len(projects)
+        )
+
+    except Exception as e:
+        logger.error("Failed to list projects", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to list projects: {str(e)}")
+
+
+@projects_router.get("/{project_id}/stats", response_model=ProjectStatsResponse)
+async def get_project_statistics(
+    project_id: str,
+    vector_store: VectorStore = Depends(get_vector_store)
+):
+    """Get detailed statistics for a specific project"""
+    try:
+        start_time = time.time()
+
+        logger.info("Retrieving project stats", project_id=project_id)
+
+        stats = vector_store.get_project_stats(project_id)
+
+        # Check if project exists
+        if 'error' in stats:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Project not found: {stats.get('error', 'Unknown error')}"
+            )
+
+        logger.info("Project stats retrieved",
+                    project_id=project_id,
+                    total_chunks=stats.get('total_chunks', 0))
+
+        return ProjectStatsResponse(
+            status=RequestStatus.SUCCESS,
+            project_id=stats['project_id'],
+            project_name=stats['project_name'],
+            total_chunks=stats['total_chunks'],
+            total_files=stats['total_files'],
+            total_tokens=stats['total_tokens'],
+            avg_tokens_per_chunk=stats['avg_tokens_per_chunk'],
+            languages=stats['languages'],
+            layer_types=stats['layer_types'],
+            last_updated=stats['last_updated']
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to get project stats",
+                     project_id=project_id,
+                     error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to get project stats: {str(e)}")
+
+
 # Include all routers
 all_routers = [
     main_router,
     search_router,
     process_router,
     status_router,
-    admin_router
+    admin_router,
+    projects_router
 ]
