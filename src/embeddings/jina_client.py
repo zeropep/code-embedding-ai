@@ -236,7 +236,7 @@ class JinaEmbeddingClient:
 
         return ordered_results
 
-    def _sanitize_text(self, text: str, max_chars: int = 4000) -> str:
+    def _sanitize_text(self, text: str, max_chars: int = 8000) -> str:
         """Sanitize text for Jina API - remove problematic characters and limit length"""
         if not text:
             return ""
