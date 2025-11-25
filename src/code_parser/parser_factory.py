@@ -153,8 +153,9 @@ class ParserFactory:
 
         for pattern in ignore_patterns:
             if pattern.endswith('/'):
-                # Directory pattern
-                if f"/{pattern}" in file_str or file_str.startswith(pattern):
+                # Directory pattern - check if pattern appears anywhere in path
+                pattern_without_slash = pattern.rstrip('/')
+                if f"/{pattern_without_slash}/" in file_str or file_str.startswith(f"{pattern_without_slash}/"):
                     return True
             else:
                 # File pattern

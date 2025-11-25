@@ -179,15 +179,40 @@ class JinaEmbeddingClient:
                             ))
 
             except Exception as e:
-                logger.error("Batch embedding failed", error=str(e))
-                # Create failed results for all uncached contents
-                for req_id in uncached_ids:
-                    api_results.append(EmbeddingResult(
-                        request_id=req_id,
-                        vector=None,
-                        status=EmbeddingStatus.FAILED,
-                        error_message=str(e)
-                    ))
+                logger.warning("Batch embedding failed, trying individual processing", error=str(e))
+                # Fallback: process each content individually
+                for content, req_id in zip(uncached_contents, uncached_ids):
+                    try:
+                        async with self._rate_limiter:
+                            vectors = await self._call_jina_api([content])
+                            if vectors and vectors[0]:
+                                if self.config.enable_caching:
+                                    self._cache_embedding(content, vectors[0])
+                                api_results.append(EmbeddingResult(
+                                    request_id=req_id,
+                                    vector=vectors[0],
+                                    status=EmbeddingStatus.COMPLETED,
+                                    processing_time=time.time() - start_time,
+                                    model_version=self.config.model_name
+                                ))
+                            else:
+                                api_results.append(EmbeddingResult(
+                                    request_id=req_id,
+                                    vector=None,
+                                    status=EmbeddingStatus.FAILED,
+                                    error_message="No vector returned"
+                                ))
+                    except Exception as individual_error:
+                        logger.warning("Individual embedding failed, skipping",
+                                     request_id=req_id,
+                                     content_preview=content[:100] if content else "",
+                                     error=str(individual_error))
+                        api_results.append(EmbeddingResult(
+                            request_id=req_id,
+                            vector=None,
+                            status=EmbeddingStatus.FAILED,
+                            error_message=f"Skipped: {str(individual_error)}"
+                        ))
 
         # Combine cached and API results
         all_results = []
@@ -211,6 +236,32 @@ class JinaEmbeddingClient:
 
         return ordered_results
 
+    def _sanitize_text(self, text: str, max_chars: int = 4000) -> str:
+        """Sanitize text for Jina API - remove problematic characters and limit length"""
+        if not text:
+            return ""
+
+        # Remove null bytes and other control characters (except newlines and tabs)
+        # Keep ASCII printable (32-126), newlines, tabs, and common unicode (>= 160)
+        sanitized = ''.join(
+            char for char in text
+            if char == '\n' or char == '\t' or char == '\r'
+            or (ord(char) >= 32 and ord(char) <= 126)
+            or (ord(char) >= 160)
+        )
+
+        # Replace multiple whitespace with single space
+        import re
+        sanitized = re.sub(r'[ \t]+', ' ', sanitized)
+        sanitized = re.sub(r'\n{3,}', '\n\n', sanitized)
+
+        # Limit length to avoid token limit issues
+        if len(sanitized) > max_chars:
+            sanitized = sanitized[:max_chars]
+            logger.debug("Text truncated", original_len=len(text), truncated_len=max_chars)
+
+        return sanitized.strip()
+
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=4, max=10),
@@ -220,15 +271,23 @@ class JinaEmbeddingClient:
         """Call Jina AI API to generate embeddings"""
         await self._ensure_session()
 
+        # Sanitize all input texts
+        sanitized_contents = [self._sanitize_text(c) for c in contents]
+
+        # Filter out empty texts
+        valid_contents = [c for c in sanitized_contents if c.strip()]
+        if not valid_contents:
+            logger.warning("No valid content to embed after sanitization")
+            return []
+
         payload = {
             "model": self.config.model_name,
-            "input": contents,
-            "encoding_format": "float"
+            "input": valid_contents
         }
 
         logger.debug("Calling Jina API",
                      model=self.config.model_name,
-                     input_count=len(contents))
+                     input_count=len(valid_contents))
 
         async with self.session.post(self.config.api_url, json=payload) as response:
             if response.status == 200:
@@ -306,7 +365,10 @@ class JinaEmbeddingClient:
             return {"enabled": False}
 
         total_entries = len(self._cache)
-        total_size = sum(len(vector[0]) * 4 for vector, _ in self._cache.values())  # Rough size in bytes
+        total_size = sum(
+            len(vector) * 4 if isinstance(vector, list) else 0
+            for vector, _ in self._cache.values()
+        )  # Rough size in bytes
 
         return {
             "enabled": True,

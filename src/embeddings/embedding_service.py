@@ -221,7 +221,7 @@ class EmbeddingService:
             "model_version": result.model_version,
             "processing_time": result.processing_time,
             "embedding_id": result.request_id,
-            "dimensions": len(result.vector) if result.vector else 0,
+            "dimensions": len(result.vector) if result.vector and isinstance(result.vector, list) else 0,
             "generated_at": result.created_at
         }
 

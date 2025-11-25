@@ -315,6 +315,13 @@ class VectorStore:
             embedding_data = chunk.metadata['embedding']
             embedding_vector = embedding_data['vector']
 
+            # Validate embedding vector
+            if not isinstance(embedding_vector, list) or len(embedding_vector) == 0:
+                logger.warning("Invalid embedding vector type",
+                               file_path=chunk.file_path,
+                               vector_type=type(embedding_vector).__name__)
+                return None
+
             # Generate unique chunk ID if not present
             chunk_id = embedding_data.get('embedding_id', str(uuid.uuid4()))
 
