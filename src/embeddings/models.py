@@ -77,7 +77,7 @@ class BatchEmbeddingRequest:
 @dataclass
 class EmbeddingConfig:
     """Configuration for embedding generation"""
-    model_name: str = "jina-code-embeddings-1.5b"
+    model_name: str = "jina-embeddings-v2-base-code"
     api_url: str = "https://api.jina.ai/v1/embeddings"
     api_key: str = ""
     dimensions: int = 1024
