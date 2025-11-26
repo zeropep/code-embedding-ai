@@ -23,7 +23,8 @@ class EmbeddingPipeline:
                  security_config: SecurityConfig = None,
                  embedding_config: EmbeddingConfig = None,
                  vector_config: VectorDBConfig = None,
-                 auto_save: bool = True):
+                 auto_save: bool = True,
+                 chunk_batch_size: int = 1000):
 
         # Initialize configurations
         self.parser_config = parser_config or ParserConfig()
@@ -31,6 +32,7 @@ class EmbeddingPipeline:
         self.embedding_config = embedding_config or EmbeddingConfig()
         self.vector_config = vector_config or VectorDBConfig()
         self.auto_save = auto_save
+        self.chunk_batch_size = chunk_batch_size  # Process this many chunks at a time
 
         # Initialize components
         self.code_parser = CodeParser(self.parser_config)
@@ -38,7 +40,9 @@ class EmbeddingPipeline:
         self.embedding_service = EmbeddingService(self.embedding_config)
         self.vector_store = VectorStore(self.vector_config)
 
-        logger.info("EmbeddingPipeline initialized", auto_save=auto_save)
+        logger.info("EmbeddingPipeline initialized",
+                   auto_save=auto_save,
+                   chunk_batch_size=chunk_batch_size)
 
     async def process_repository(self, repo_path: str, project_id: Optional[str] = None, project_name: Optional[str] = None) -> Dict[str, Any]:
         """Process entire repository through the pipeline"""
@@ -72,26 +76,51 @@ class EmbeddingPipeline:
             logger.info("Step 2: Security scanning and masking")
             secured_chunks = self.security_scanner.scan_chunks(all_chunks)
 
-            # Step 3: Generate embeddings
-            logger.info("Step 3: Generating embeddings")
-            await self.embedding_service.start()
+            # Step 3 & 4: Generate embeddings and store in batches
+            logger.info("Step 3: Generating embeddings in batches",
+                       total_chunks=len(secured_chunks),
+                       batch_size=self.chunk_batch_size)
 
-            try:
-                embedded_chunks = await self.embedding_service.generate_chunk_embeddings(secured_chunks)
-            finally:
-                await self.embedding_service.stop()
-
-            # Step 4: Store in database (if auto_save enabled)
+            # Connect to database if auto_save is enabled
             if self.auto_save:
-                logger.info("Step 4: Storing in database")
                 if not self.vector_store.connect():
                     logger.error("Failed to connect to vector database")
                     return self._create_error_result("Failed to connect to vector database")
 
-                store_result = self.vector_store.store_chunks(embedded_chunks)
-                logger.info("Database storage completed",
-                          stored_chunks=store_result.successful_items,
-                          failed=store_result.failed_items)
+            await self.embedding_service.start()
+            embedded_chunks = []
+            total_stored = 0
+
+            try:
+                # Process in batches
+                for batch_idx in range(0, len(secured_chunks), self.chunk_batch_size):
+                    batch_end = min(batch_idx + self.chunk_batch_size, len(secured_chunks))
+                    batch = secured_chunks[batch_idx:batch_end]
+                    batch_num = (batch_idx // self.chunk_batch_size) + 1
+                    total_batches = (len(secured_chunks) + self.chunk_batch_size - 1) // self.chunk_batch_size
+
+                    logger.info(f"Processing batch {batch_num}/{total_batches}",
+                               batch_chunks=len(batch),
+                               progress=f"{batch_end}/{len(secured_chunks)}")
+
+                    # Generate embeddings for this batch
+                    batch_embedded = await self.embedding_service.generate_chunk_embeddings(batch)
+                    embedded_chunks.extend(batch_embedded)
+
+                    # Store this batch immediately if auto_save enabled
+                    if self.auto_save:
+                        store_result = self.vector_store.store_chunks(batch_embedded)
+                        total_stored += store_result.successful_items
+                        logger.info(f"Batch {batch_num}/{total_batches} stored",
+                                   stored=store_result.successful_items,
+                                   failed=store_result.failed_items,
+                                   total_stored=total_stored)
+
+                if self.auto_save:
+                    logger.info("All batches stored in database", total_stored=total_stored)
+
+            finally:
+                await self.embedding_service.stop()
 
             # Step 5: Compile results
             logger.info("Step 5: Compiling results")
@@ -136,25 +165,51 @@ class EmbeddingPipeline:
             # Step 2: Security scanning
             secured_chunks = self.security_scanner.scan_chunks(all_chunks)
 
-            # Step 3: Generate embeddings
-            await self.embedding_service.start()
+            # Step 3 & 4: Generate embeddings and store in batches
+            logger.info("Generating embeddings in batches",
+                       total_chunks=len(secured_chunks),
+                       batch_size=self.chunk_batch_size)
 
-            try:
-                embedded_chunks = await self.embedding_service.generate_chunk_embeddings(secured_chunks)
-            finally:
-                await self.embedding_service.stop()
-
-            # Step 4: Store in database (if auto_save enabled)
+            # Connect to database if auto_save is enabled
             if self.auto_save:
-                logger.info("Storing in database")
                 if not self.vector_store.connect():
                     logger.error("Failed to connect to vector database")
                     return self._create_error_result("Failed to connect to vector database")
 
-                store_result = self.vector_store.store_chunks(embedded_chunks)
-                logger.info("Database storage completed",
-                          stored_chunks=store_result.successful_items,
-                          failed=store_result.failed_items)
+            await self.embedding_service.start()
+            embedded_chunks = []
+            total_stored = 0
+
+            try:
+                # Process in batches
+                for batch_idx in range(0, len(secured_chunks), self.chunk_batch_size):
+                    batch_end = min(batch_idx + self.chunk_batch_size, len(secured_chunks))
+                    batch = secured_chunks[batch_idx:batch_end]
+                    batch_num = (batch_idx // self.chunk_batch_size) + 1
+                    total_batches = (len(secured_chunks) + self.chunk_batch_size - 1) // self.chunk_batch_size
+
+                    logger.info(f"Processing batch {batch_num}/{total_batches}",
+                               batch_chunks=len(batch),
+                               progress=f"{batch_end}/{len(secured_chunks)}")
+
+                    # Generate embeddings for this batch
+                    batch_embedded = await self.embedding_service.generate_chunk_embeddings(batch)
+                    embedded_chunks.extend(batch_embedded)
+
+                    # Store this batch immediately if auto_save enabled
+                    if self.auto_save:
+                        store_result = self.vector_store.store_chunks(batch_embedded)
+                        total_stored += store_result.successful_items
+                        logger.info(f"Batch {batch_num}/{total_batches} stored",
+                                   stored=store_result.successful_items,
+                                   failed=store_result.failed_items,
+                                   total_stored=total_stored)
+
+                if self.auto_save:
+                    logger.info("All batches stored in database", total_stored=total_stored)
+
+            finally:
+                await self.embedding_service.stop()
 
             # Compile results
             result = self._compile_pipeline_result(
