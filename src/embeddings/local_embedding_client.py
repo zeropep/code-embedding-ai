@@ -1,0 +1,364 @@
+import asyncio
+import hashlib
+import time
+from typing import List, Dict, Any, Optional, Tuple
+import structlog
+
+from .models import EmbeddingConfig, EmbeddingResult, EmbeddingStatus
+
+
+logger = structlog.get_logger(__name__)
+
+
+class LocalEmbeddingClient:
+    """Client for local embedding using Sentence Transformers"""
+
+    def __init__(self, config: EmbeddingConfig):
+        self.config = config
+        self.model = None
+        self._cache: Dict[str, Tuple[List[float], float]] = {}
+        self._rate_limiter = asyncio.Semaphore(config.max_concurrent_requests)
+        self._model_loaded = False
+
+        logger.info("LocalEmbeddingClient initialized",
+                    model=config.model_name,
+                    batch_size=config.batch_size)
+
+    async def __aenter__(self):
+        """Async context manager entry"""
+        await self._ensure_model_loaded()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit"""
+        await self.close()
+
+    async def _ensure_model_loaded(self):
+        """Ensure model is loaded"""
+        if self._model_loaded and self.model is not None:
+            return
+
+        try:
+            # Import here to avoid loading if not needed
+            from sentence_transformers import SentenceTransformer
+
+            logger.info("Loading local embedding model", model=self.config.model_name)
+            start_time = time.time()
+
+            # Load model in thread pool to avoid blocking
+            loop = asyncio.get_event_loop()
+            self.model = await loop.run_in_executor(
+                None,
+                lambda: SentenceTransformer(
+                    self.config.model_name,
+                    trust_remote_code=True
+                )
+            )
+
+            # Set max sequence length (Jina supports up to 8192)
+            if hasattr(self.model, 'max_seq_length'):
+                self.model.max_seq_length = 8192
+
+            self._model_loaded = True
+            load_time = time.time() - start_time
+            logger.info("Local model loaded successfully",
+                       model=self.config.model_name,
+                       load_time=f"{load_time:.2f}s")
+
+        except ImportError:
+            logger.error("sentence-transformers not installed. Install with: pip install sentence-transformers")
+            raise ImportError(
+                "sentence-transformers is required for local embeddings. "
+                "Install with: pip install sentence-transformers"
+            )
+        except Exception as e:
+            logger.error("Failed to load local embedding model", error=str(e))
+            raise
+
+    async def close(self):
+        """Close the client (cleanup if needed)"""
+        # Sentence transformers doesn't need explicit cleanup
+        # but we can clear the cache
+        if self._model_loaded:
+            logger.info("Closing local embedding client")
+            self._model_loaded = False
+
+    async def generate_embedding(self, content: str, request_id: str = "") -> EmbeddingResult:
+        """Generate embedding for single content"""
+        start_time = time.time()
+
+        # Check cache first
+        if self.config.enable_caching:
+            cached_vector = self._get_cached_embedding(content)
+            if cached_vector:
+                logger.debug("Cache hit for embedding", request_id=request_id)
+                return EmbeddingResult(
+                    request_id=request_id,
+                    vector=cached_vector,
+                    status=EmbeddingStatus.COMPLETED,
+                    processing_time=time.time() - start_time,
+                    model_version=self.config.model_name
+                )
+
+        try:
+            await self._ensure_model_loaded()
+
+            # Sanitize content
+            sanitized = self._sanitize_text(content)
+            if not sanitized:
+                raise ValueError("Empty content after sanitization")
+
+            # Generate embedding in thread pool to avoid blocking
+            loop = asyncio.get_event_loop()
+            embedding_vector = await loop.run_in_executor(
+                None,
+                lambda: self.model.encode([sanitized], convert_to_numpy=False)[0]
+            )
+
+            # Convert to list if needed
+            if not isinstance(embedding_vector, list):
+                embedding_vector = embedding_vector.tolist()
+
+            # Cache the result
+            if self.config.enable_caching:
+                self._cache_embedding(content, embedding_vector)
+
+            return EmbeddingResult(
+                request_id=request_id,
+                vector=embedding_vector,
+                status=EmbeddingStatus.COMPLETED,
+                processing_time=time.time() - start_time,
+                model_version=self.config.model_name
+            )
+
+        except Exception as e:
+            logger.error("Failed to generate embedding",
+                         request_id=request_id,
+                         error=str(e))
+            return EmbeddingResult(
+                request_id=request_id,
+                vector=None,
+                status=EmbeddingStatus.FAILED,
+                error_message=str(e),
+                processing_time=time.time() - start_time
+            )
+
+    async def generate_embeddings_batch(self, contents: List[str],
+                                        request_ids: List[str] = None) -> List[EmbeddingResult]:
+        """Generate embeddings for multiple contents in batch"""
+        if request_ids is None:
+            request_ids = [f"batch_{i}" for i in range(len(contents))]
+
+        if len(contents) != len(request_ids):
+            raise ValueError("Contents and request_ids must have the same length")
+
+        logger.info("Generating batch embeddings (local)",
+                    batch_size=len(contents),
+                    model=self.config.model_name)
+
+        # Process in chunks to respect batch size limits
+        results = []
+        for i in range(0, len(contents), self.config.batch_size):
+            chunk_contents = contents[i:i + self.config.batch_size]
+            chunk_ids = request_ids[i:i + self.config.batch_size]
+
+            chunk_results = await self._process_batch_chunk(chunk_contents, chunk_ids)
+            results.extend(chunk_results)
+
+        return results
+
+    async def _process_batch_chunk(self, contents: List[str],
+                                   request_ids: List[str]) -> List[EmbeddingResult]:
+        """Process a single batch chunk"""
+        start_time = time.time()
+
+        # Separate cached and non-cached contents
+        cached_results = []
+        uncached_contents = []
+        uncached_ids = []
+        uncached_indices = []
+
+        if self.config.enable_caching:
+            for idx, (content, req_id) in enumerate(zip(contents, request_ids)):
+                cached_vector = self._get_cached_embedding(content)
+                if cached_vector:
+                    cached_results.append((idx, req_id, cached_vector))
+                else:
+                    uncached_contents.append(content)
+                    uncached_ids.append(req_id)
+                    uncached_indices.append(idx)
+        else:
+            uncached_contents = contents
+            uncached_ids = request_ids
+            uncached_indices = list(range(len(contents)))
+
+        # Generate embeddings for uncached content
+        api_results = []
+        if uncached_contents:
+            try:
+                await self._ensure_model_loaded()
+
+                # Sanitize all contents
+                sanitized_contents = [self._sanitize_text(c) for c in uncached_contents]
+                valid_indices = [i for i, c in enumerate(sanitized_contents) if c.strip()]
+                valid_contents = [sanitized_contents[i] for i in valid_indices]
+
+                if valid_contents:
+                    # Generate embeddings in thread pool
+                    async with self._rate_limiter:
+                        loop = asyncio.get_event_loop()
+                        embedding_vectors = await loop.run_in_executor(
+                            None,
+                            lambda: self.model.encode(valid_contents, convert_to_numpy=False)
+                        )
+
+                        # Convert to list if needed
+                        if not isinstance(embedding_vectors, list):
+                            embedding_vectors = embedding_vectors.tolist()
+
+                        # Process results
+                        valid_idx_map = {valid_indices[i]: i for i in range(len(valid_indices))}
+
+                        for i, (content, req_id) in enumerate(zip(uncached_contents, uncached_ids)):
+                            if i in valid_idx_map:
+                                vector_idx = valid_idx_map[i]
+                                vector = embedding_vectors[vector_idx]
+
+                                # Convert numpy array to list if needed
+                                if not isinstance(vector, list):
+                                    vector = vector.tolist()
+
+                                # Cache the result
+                                if self.config.enable_caching:
+                                    self._cache_embedding(content, vector)
+
+                                api_results.append((uncached_indices[i], EmbeddingResult(
+                                    request_id=req_id,
+                                    vector=vector,
+                                    status=EmbeddingStatus.COMPLETED,
+                                    processing_time=time.time() - start_time,
+                                    model_version=self.config.model_name
+                                )))
+                            else:
+                                api_results.append((uncached_indices[i], EmbeddingResult(
+                                    request_id=req_id,
+                                    vector=None,
+                                    status=EmbeddingStatus.FAILED,
+                                    error_message="Empty content after sanitization"
+                                )))
+
+            except Exception as e:
+                logger.error("Batch embedding failed", error=str(e))
+                # Return failed results for all uncached items
+                for idx, req_id in zip(uncached_indices, uncached_ids):
+                    api_results.append((idx, EmbeddingResult(
+                        request_id=req_id,
+                        vector=None,
+                        status=EmbeddingStatus.FAILED,
+                        error_message=str(e)
+                    )))
+
+        # Combine cached and API results in original order
+        all_results = [None] * len(contents)
+
+        # Add cached results
+        for idx, req_id, vector in cached_results:
+            all_results[idx] = EmbeddingResult(
+                request_id=req_id,
+                vector=vector,
+                status=EmbeddingStatus.COMPLETED,
+                processing_time=0.0,  # Cached, no processing time
+                model_version=self.config.model_name
+            )
+
+        # Add API results
+        for idx, result in api_results:
+            all_results[idx] = result
+
+        return all_results
+
+    def _sanitize_text(self, text: str, max_chars: int = 8000) -> str:
+        """Sanitize text - remove problematic characters and limit length"""
+        if not text:
+            return ""
+
+        # Remove null bytes and other control characters (except newlines and tabs)
+        sanitized = ''.join(
+            char for char in text
+            if char == '\n' or char == '\t' or char == '\r'
+            or (ord(char) >= 32 and ord(char) <= 126)
+            or (ord(char) >= 160)
+        )
+
+        # Replace multiple whitespace with single space
+        import re
+        sanitized = re.sub(r'[ \t]+', ' ', sanitized)
+        sanitized = re.sub(r'\n{3,}', '\n\n', sanitized)
+
+        # Limit length to avoid token limit issues
+        if len(sanitized) > max_chars:
+            sanitized = sanitized[:max_chars]
+            logger.debug("Text truncated", original_len=len(text), truncated_len=max_chars)
+
+        return sanitized.strip()
+
+    def _get_cache_key(self, content: str) -> str:
+        """Generate cache key for content"""
+        return hashlib.sha256(content.encode()).hexdigest()
+
+    def _get_cached_embedding(self, content: str) -> Optional[List[float]]:
+        """Get cached embedding if available and not expired"""
+        if not self.config.enable_caching:
+            return None
+
+        cache_key = self._get_cache_key(content)
+        if cache_key in self._cache:
+            vector, timestamp = self._cache[cache_key]
+            if time.time() - timestamp < self.config.cache_ttl:
+                return vector
+            else:
+                # Expired, remove from cache
+                del self._cache[cache_key]
+
+        return None
+
+    def _cache_embedding(self, content: str, vector: List[float]):
+        """Cache embedding result"""
+        if not self.config.enable_caching:
+            return
+
+        cache_key = self._get_cache_key(content)
+        self._cache[cache_key] = (vector, time.time())
+
+        # Simple cache size management
+        if len(self._cache) > 1000:
+            # Remove oldest entries
+            oldest_keys = sorted(
+                self._cache.keys(),
+                key=lambda k: self._cache[k][1]
+            )[:100]
+            for key in oldest_keys:
+                del self._cache[key]
+
+    def clear_cache(self):
+        """Clear embedding cache"""
+        self._cache.clear()
+        logger.info("Embedding cache cleared")
+
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """Get cache statistics"""
+        if not self.config.enable_caching:
+            return {"enabled": False}
+
+        total_entries = len(self._cache)
+        total_size = sum(
+            len(vector) * 4 if isinstance(vector, list) else 0
+            for vector, _ in self._cache.values()
+        )  # Rough size in bytes
+
+        return {
+            "enabled": True,
+            "total_entries": total_entries,
+            "estimated_size_mb": total_size / (1024 * 1024),
+            "cache_ttl": self.config.cache_ttl
+        }

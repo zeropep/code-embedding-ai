@@ -4,6 +4,7 @@ from typing import List, Dict, Any, Optional
 import structlog
 
 from .jina_client import JinaEmbeddingClient
+from .local_embedding_client import LocalEmbeddingClient
 from .models import (EmbeddingConfig, EmbeddingRequest, EmbeddingResult,
                      EmbeddingStatus, EmbeddingMetrics)
 from ..code_parser.models import CodeChunk
@@ -24,7 +25,15 @@ class EmbeddingService:
             raise ValueError(f"Invalid embedding configuration: {validation_error}")
 
         self.config = config
-        self.client = JinaEmbeddingClient(config)
+
+        # Select client based on configuration
+        if config.use_local_model:
+            logger.info("Using local embedding model")
+            self.client = LocalEmbeddingClient(config)
+        else:
+            logger.info("Using remote Jina API")
+            self.client = JinaEmbeddingClient(config)
+
         self.metrics = EmbeddingMetrics()
         self._request_queue: asyncio.Queue = None
         self._processing_task: Optional[asyncio.Task] = None
@@ -32,7 +41,8 @@ class EmbeddingService:
 
         logger.info("EmbeddingService initialized",
                     model=config.model_name,
-                    batch_size=config.batch_size)
+                    batch_size=config.batch_size,
+                    use_local=config.use_local_model)
 
     async def start(self):
         """Start the embedding service"""

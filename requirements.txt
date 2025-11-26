@@ -7,9 +7,9 @@ python-dotenv==1.0.0
 
 # AI/ML dependencies
 jina==3.34.0
-sentence-transformers==2.2.2
-transformers==4.36.0
-torch==2.1.0
+sentence-transformers>=2.3.0,<3.0.0  # Required for Jina embeddings local support
+transformers>=4.41.0,<5.0.0
+torch>=2.0.0
 numpy==1.24.3
 
 # Vector database

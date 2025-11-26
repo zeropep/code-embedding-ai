@@ -77,10 +77,10 @@ class BatchEmbeddingRequest:
 @dataclass
 class EmbeddingConfig:
     """Configuration for embedding generation"""
-    model_name: str = "jina-embeddings-v2-base-code"
+    model_name: str = "jinaai/jina-embeddings-v2-base-code"
     api_url: str = "https://api.jina.ai/v1/embeddings"
     api_key: str = ""
-    dimensions: int = 1024
+    dimensions: int = 768
     max_retries: int = 3
     retry_delay: float = 1.0
     timeout: int = 30
@@ -89,11 +89,16 @@ class EmbeddingConfig:
     rate_limit_per_minute: int = 200
     enable_caching: bool = True
     cache_ttl: int = 3600  # Cache TTL in seconds
+    use_local_model: bool = True  # Use local model by default
 
     def __post_init__(self):
         """Load values from environment variables if not explicitly set"""
         # Ensure .env file is loaded
         load_dotenv()
+
+        # Load use_local_model from env (default: true)
+        use_local_env = os.getenv("USE_LOCAL_EMBEDDING_MODEL", "true")
+        self.use_local_model = use_local_env.lower() == "true"
 
         # Only load from env if api_key is empty (default value)
         if not self.api_key:
@@ -101,11 +106,14 @@ class EmbeddingConfig:
         # Only load from env if api_url is default value
         if self.api_url == "https://api.jina.ai/v1/embeddings":
             self.api_url = os.getenv("JINA_API_URL", self.api_url)
-        # Load other optional configs from environment
-        if self.model_name == "jina-code-embeddings-1.5b":
-            self.model_name = os.getenv("EMBEDDING_MODEL", self.model_name)
-        if self.dimensions == 1024:
-            self.dimensions = int(os.getenv("EMBEDDING_DIMENSIONS", str(self.dimensions)))
+        # Load model name from environment
+        model_env = os.getenv("EMBEDDING_MODEL", "")
+        if model_env:
+            self.model_name = model_env
+        # Load dimensions from environment
+        dimensions_env = os.getenv("EMBEDDING_DIMENSIONS", "")
+        if dimensions_env:
+            self.dimensions = int(dimensions_env)
         if self.batch_size == 20:
             self.batch_size = int(os.getenv("EMBEDDING_BATCH_SIZE", str(self.batch_size)))
         if self.max_concurrent_requests == 10:
@@ -113,16 +121,17 @@ class EmbeddingConfig:
                 os.getenv("MAX_CONCURRENT_EMBEDDINGS", str(self.max_concurrent_requests)))
         if self.timeout == 30:
             self.timeout = int(os.getenv("EMBEDDING_TIMEOUT", str(self.timeout)))
-        if self.enable_caching:
-            cache_env = os.getenv("ENABLE_EMBEDDING_CACHE", "true")
-            self.enable_caching = cache_env.lower() == "true"
+        cache_env = os.getenv("ENABLE_EMBEDDING_CACHE", "true")
+        self.enable_caching = cache_env.lower() == "true"
 
     def validate(self) -> Optional[str]:
         """Validate configuration. Returns None if valid, error message if invalid."""
-        if not self.api_key:
-            return "api_key is required but not set"
-        if not self.api_url:
-            return "api_url is required but not set"
+        # Only require API key if using remote API
+        if not self.use_local_model:
+            if not self.api_key:
+                return "api_key is required when using remote API (set USE_LOCAL_EMBEDDING_MODEL=false)"
+            if not self.api_url:
+                return "api_url is required when using remote API"
         if self.batch_size <= 0 or self.batch_size > 100:
             return f"batch_size must be between 1 and 100, got {self.batch_size}"
         if self.max_concurrent_requests <= 0:
