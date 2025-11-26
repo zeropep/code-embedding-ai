@@ -9,13 +9,18 @@ from .models import (
     RequestStatus, SimilarCodeRequest, ProcessRepositoryResponse,
     ProcessRepositoryRequest, ProcessingMode, BatchProcessRequest,
     SystemStatusResponse, MetricsResponse, BatchDeleteRequest,
-    ProjectListResponse, ProjectStatsResponse, ProjectInfo
+    ProjectListResponse, ProjectStatsResponse, ProjectInfo,
+    ProjectCreateRequest, ProjectCreateResponse, ProjectDetailResponse,
+    ProjectUpdateRequest, ProjectUpdateResponse, ProjectDeleteResponse
 )
 from .dependencies import get_embedding_pipeline, get_update_service, get_vector_store
 from ..embeddings.embedding_pipeline import EmbeddingPipeline
 from ..updates.update_service import UpdateService
 from ..updates.models import UpdateRequest
 from ..database.vector_store import VectorStore
+from ..database.project_repository import ProjectRepository
+from ..database.project_models import Project, ProjectStatus
+from datetime import datetime
 
 
 logger = structlog.get_logger(__name__)
@@ -427,6 +432,83 @@ async def trigger_update(
         raise HTTPException(status_code=500, detail=f"Update failed: {str(e)}")
 
 
+@process_router.post("/project/{project_id}", response_model=ProcessRepositoryResponse)
+async def process_project(
+    project_id: str,
+    pipeline: EmbeddingPipeline = Depends(get_embedding_pipeline)
+):
+    """Process all files in a project's repository"""
+    try:
+        request_id = str(uuid.uuid4())
+
+        logger.info("Processing project repository",
+                    request_id=request_id,
+                    project_id=project_id)
+
+        # Get project information
+        project_repo = ProjectRepository()
+        project = project_repo.get(project_id)
+
+        if not project:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Project '{project_id}' not found"
+            )
+
+        # Check if repository path exists
+        from pathlib import Path
+        repo_path = Path(project.repository_path)
+        if not repo_path.exists():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Repository path does not exist: {project.repository_path}"
+            )
+
+        logger.info("Starting repository processing",
+                    project_id=project_id,
+                    project_name=project.name,
+                    repo_path=project.repository_path)
+
+        # Process repository with project metadata
+        result = await pipeline.process_repository(
+            repo_path=project.repository_path,
+            project_id=project.project_id,
+            project_name=project.name
+        )
+
+        if result["status"] == "error":
+            raise HTTPException(status_code=500, detail=result.get("error", "Processing failed"))
+
+        # Update project statistics
+        if result.get("processing_summary"):
+            summary = result["processing_summary"]
+            project_repo.update(project_id, {
+                "total_chunks": summary.get("total_chunks", 0),
+                "total_files": summary.get("files_processed", 0),
+                "last_indexed_at": datetime.now(),
+                "status": "active"
+            })
+            logger.info("Project statistics updated",
+                       project_id=project_id,
+                       total_chunks=summary.get("total_chunks", 0))
+
+        return ProcessRepositoryResponse(
+            status=RequestStatus.SUCCESS,
+            message=f"Project '{project.name}' processed successfully",
+            request_id=request_id,
+            processing_summary=result.get("processing_summary"),
+            parsing_stats=result.get("parsing_stats"),
+            security_stats=result.get("security_stats"),
+            embedding_stats=result.get("embedding_stats")
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Project processing failed", project_id=project_id, error=str(e))
+        raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
+
+
 # Status Routes
 @status_router.get("/system", response_model=SystemStatusResponse)
 async def get_system_status(
@@ -559,23 +641,28 @@ async def reset_database(
 async def list_projects(
     vector_store: VectorStore = Depends(get_vector_store)
 ):
-    """Get list of all projects in the database"""
+    """Get list of all projects from the project repository"""
     try:
         start_time = time.time()
 
         logger.info("Listing all projects")
 
-        projects_data = vector_store.get_all_projects()
+        # Get projects from ProjectRepository
+        project_repo = ProjectRepository()
+        all_projects = project_repo.get_all()
 
-        # Convert to ProjectInfo models
-        projects = [
-            ProjectInfo(
-                id=project['id'],
-                name=project['name'],
-                chunk_count=project['chunk_count']
-            )
-            for project in projects_data
-        ]
+        # Get chunk counts from vector store for each project
+        projects = []
+        for project in all_projects:
+            # Get stats from vector store
+            stats = vector_store.get_project_stats(project.project_id)
+            chunk_count = stats.get('total_chunks', 0) if 'error' not in stats else 0
+
+            projects.append(ProjectInfo(
+                id=project.project_id,
+                name=project.name,
+                chunk_count=chunk_count
+            ))
 
         logger.info("Projects listed", total_projects=len(projects))
 
@@ -602,13 +689,34 @@ async def get_project_statistics(
 
         logger.info("Retrieving project stats", project_id=project_id)
 
-        stats = vector_store.get_project_stats(project_id)
+        # First check if project exists in ProjectRepository
+        project_repo = ProjectRepository()
+        project = project_repo.get(project_id)
 
-        # Check if project exists
-        if 'error' in stats:
+        if not project:
             raise HTTPException(
                 status_code=404,
-                detail=f"Project not found: {stats.get('error', 'Unknown error')}"
+                detail=f"Project '{project_id}' not found"
+            )
+
+        # Get stats from vector store
+        stats = vector_store.get_project_stats(project_id)
+
+        # If no chunks exist yet, return default stats with project info from repository
+        if 'error' in stats:
+            logger.info("No chunks found for project, returning default stats",
+                       project_id=project_id)
+            return ProjectStatsResponse(
+                status=RequestStatus.SUCCESS,
+                project_id=project.project_id,
+                project_name=project.name,
+                total_chunks=0,
+                total_files=0,
+                total_tokens=0,
+                avg_tokens_per_chunk=0.0,
+                languages={},
+                layer_types={},
+                last_updated=project.updated_at.timestamp()
             )
 
         logger.info("Project stats retrieved",
@@ -635,6 +743,246 @@ async def get_project_statistics(
                      project_id=project_id,
                      error=str(e))
         raise HTTPException(status_code=500, detail=f"Failed to get project stats: {str(e)}")
+
+
+@projects_router.post("/", response_model=ProjectCreateResponse, status_code=201)
+async def create_project(
+    request: ProjectCreateRequest
+):
+    """Create a new project and generate unique project ID"""
+    try:
+        logger.info("Creating new project", name=request.name)
+
+        # Initialize project repository
+        project_repo = ProjectRepository()
+
+        # Generate project ID
+        project_id = Project.generate_id()
+
+        # Create project object
+        project = Project(
+            project_id=project_id,
+            name=request.name,
+            repository_path=request.repository_path,
+            description=request.description,
+            git_remote_url=request.git_remote_url,
+            git_branch=request.git_branch,
+            status=ProjectStatus.INITIALIZING
+        )
+
+        # Save to database
+        created_project = project_repo.create(project)
+
+        logger.info("Project created successfully",
+                    project_id=created_project.project_id,
+                    name=created_project.name)
+
+        return ProjectCreateResponse(
+            message=f"Project '{request.name}' created successfully",
+            project_id=created_project.project_id,
+            name=created_project.name,
+            repository_path=created_project.repository_path,
+            git_remote_url=created_project.git_remote_url,
+            git_branch=created_project.git_branch,
+            created_at=created_project.created_at.isoformat()
+        )
+
+    except ValueError as e:
+        logger.error("Project creation failed - validation error", error=str(e))
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error("Failed to create project", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to create project: {str(e)}")
+
+
+@projects_router.get("/{project_id}", response_model=ProjectDetailResponse)
+async def get_project_details(
+    project_id: str,
+    vector_store: VectorStore = Depends(get_vector_store)
+):
+    """Get detailed information about a specific project"""
+    try:
+        logger.info("Retrieving project details", project_id=project_id)
+
+        # Get from project repository
+        project_repo = ProjectRepository()
+        project = project_repo.get(project_id)
+
+        if not project:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Project '{project_id}' not found"
+            )
+
+        # Get latest stats from vector store
+        stats = vector_store.get_project_stats(project_id)
+        if 'error' not in stats:
+            # Update project with latest counts
+            project.total_chunks = stats.get('total_chunks', 0)
+            project.total_files = stats.get('total_files', 0)
+
+        logger.info("Project details retrieved", project_id=project_id)
+
+        return ProjectDetailResponse(
+            project_id=project.project_id,
+            name=project.name,
+            repository_path=project.repository_path,
+            description=project.description,
+            git_remote_url=project.git_remote_url,
+            git_branch=project.git_branch,
+            project_status=project.status.value,
+            created_at=project.created_at.isoformat(),
+            updated_at=project.updated_at.isoformat(),
+            total_chunks=project.total_chunks,
+            total_files=project.total_files,
+            last_indexed_at=project.last_indexed_at.isoformat() if project.last_indexed_at else None
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to get project details",
+                     project_id=project_id,
+                     error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to get project details: {str(e)}")
+
+
+@projects_router.put("/{project_id}", response_model=ProjectUpdateResponse)
+async def update_project(
+    project_id: str,
+    request: ProjectUpdateRequest
+):
+    """Update project information"""
+    try:
+        logger.info("Updating project", project_id=project_id)
+
+        # Initialize project repository
+        project_repo = ProjectRepository()
+
+        # Check if project exists
+        if not project_repo.exists(project_id):
+            raise HTTPException(
+                status_code=404,
+                detail=f"Project '{project_id}' not found"
+            )
+
+        # Prepare updates
+        updates = {}
+        if request.name is not None:
+            updates['name'] = request.name
+        if request.repository_path is not None:
+            updates['repository_path'] = request.repository_path
+        if request.description is not None:
+            updates['description'] = request.description
+        if request.git_remote_url is not None:
+            updates['git_remote_url'] = request.git_remote_url
+        if request.git_branch is not None:
+            updates['git_branch'] = request.git_branch
+        if request.status is not None:
+            updates['status'] = request.status
+
+        # Update project
+        updated_project = project_repo.update(project_id, updates)
+
+        if not updated_project:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Project '{project_id}' not found"
+            )
+
+        logger.info("Project updated successfully", project_id=project_id)
+
+        # Return updated project details
+        project_detail = ProjectDetailResponse(
+            project_id=updated_project.project_id,
+            name=updated_project.name,
+            repository_path=updated_project.repository_path,
+            description=updated_project.description,
+            git_remote_url=updated_project.git_remote_url,
+            git_branch=updated_project.git_branch,
+            project_status=updated_project.status.value,
+            created_at=updated_project.created_at.isoformat(),
+            updated_at=updated_project.updated_at.isoformat(),
+            total_chunks=updated_project.total_chunks,
+            total_files=updated_project.total_files,
+            last_indexed_at=updated_project.last_indexed_at.isoformat()
+                if updated_project.last_indexed_at else None
+        )
+
+        return ProjectUpdateResponse(
+            message=f"Project '{project_id}' updated successfully",
+            project=project_detail
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to update project",
+                     project_id=project_id,
+                     error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to update project: {str(e)}")
+
+
+@projects_router.delete("/{project_id}", response_model=ProjectDeleteResponse)
+async def delete_project(
+    project_id: str,
+    delete_chunks: bool = Query(False, description="Also delete all chunks belonging to this project"),
+    vector_store: VectorStore = Depends(get_vector_store)
+):
+    """Delete a project and optionally its embeddings"""
+    try:
+        logger.info("Deleting project", project_id=project_id, delete_chunks=delete_chunks)
+
+        # Initialize project repository
+        project_repo = ProjectRepository()
+
+        # Check if project exists
+        if not project_repo.exists(project_id):
+            raise HTTPException(
+                status_code=404,
+                detail=f"Project '{project_id}' not found"
+            )
+
+        chunks_deleted = 0
+
+        # Delete chunks if requested
+        if delete_chunks:
+            logger.info("Deleting chunks for project", project_id=project_id)
+            try:
+                # Delete chunks from vector store
+                result = vector_store.delete_by_metadata({"project_id": project_id})
+                chunks_deleted = result.successful_items
+                logger.info("Chunks deleted", project_id=project_id, count=chunks_deleted)
+            except Exception as e:
+                logger.error("Failed to delete chunks", project_id=project_id, error=str(e))
+                # Continue with project deletion even if chunk deletion fails
+
+        # Delete project from repository
+        deleted = project_repo.delete(project_id)
+
+        if not deleted:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Project '{project_id}' not found"
+            )
+
+        logger.info("Project deleted successfully",
+                    project_id=project_id,
+                    chunks_deleted=chunks_deleted)
+
+        return ProjectDeleteResponse(
+            message=f"Project '{project_id}' deleted successfully",
+            project_id=project_id,
+            chunks_deleted=chunks_deleted
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to delete project",
+                     project_id=project_id,
+                     error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to delete project: {str(e)}")
 
 
 # Include all routers

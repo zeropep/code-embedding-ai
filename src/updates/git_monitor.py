@@ -388,3 +388,86 @@ class GitMonitor:
         except Exception as e:
             logger.error("Failed to reset repository", commit=commit_hash, error=str(e))
             return False
+
+    def pull_latest(self, remote_name: str = "origin", branch: Optional[str] = None) -> bool:
+        """Pull latest changes from remote repository"""
+        if not self._ensure_connected():
+            logger.error("Cannot pull: not connected to repository")
+            return False
+
+        try:
+            # Check if remote exists
+            if not self.repo.remotes:
+                logger.error("No remote repositories configured")
+                return False
+
+            # Get the specified remote or origin
+            try:
+                remote = self.repo.remote(remote_name)
+            except ValueError:
+                logger.error("Remote not found", remote_name=remote_name)
+                return False
+
+            # Use current branch if not specified
+            if not branch:
+                branch = self.repo.active_branch.name
+
+            logger.info("Pulling latest changes from remote",
+                       remote=remote_name,
+                       branch=branch)
+
+            # Fetch latest changes
+            fetch_info = remote.fetch()
+            logger.debug("Fetch completed", info=str(fetch_info))
+
+            # Pull changes
+            pull_info = remote.pull(branch)
+
+            # Check for conflicts or errors
+            for info in pull_info:
+                if info.flags & info.ERROR:
+                    logger.error("Pull error detected", info=str(info))
+                    return False
+
+            logger.info("Successfully pulled latest changes",
+                       remote=remote_name,
+                       branch=branch)
+            return True
+
+        except git.GitCommandError as e:
+            logger.error("Git command failed during pull",
+                        error=str(e),
+                        stderr=e.stderr if hasattr(e, 'stderr') else None)
+            return False
+        except Exception as e:
+            logger.error("Failed to pull latest changes", error=str(e))
+            return False
+
+    def add_remote(self, name: str, url: str) -> bool:
+        """Add a remote repository"""
+        if not self._ensure_connected():
+            logger.error("Cannot add remote: not connected to repository")
+            return False
+
+        try:
+            # Check if remote already exists
+            try:
+                existing_remote = self.repo.remote(name)
+                logger.warning("Remote already exists, updating URL",
+                             name=name,
+                             old_url=existing_remote.url,
+                             new_url=url)
+                existing_remote.set_url(url)
+            except ValueError:
+                # Remote doesn't exist, create it
+                self.repo.create_remote(name, url)
+                logger.info("Remote added", name=name, url=url)
+
+            return True
+
+        except Exception as e:
+            logger.error("Failed to add remote",
+                        name=name,
+                        url=url,
+                        error=str(e))
+            return False

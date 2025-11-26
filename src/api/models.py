@@ -302,3 +302,89 @@ class ProjectStatsResponse(BaseModel):
     layer_types: Dict[str, int] = Field(..., description="Distribution of layer types")
     last_updated: float
     timestamp: float = Field(default_factory=time.time)
+
+
+# Project CRUD Models
+class ProjectCreateRequest(BaseModel):
+    name: str = Field(..., description="Project name", min_length=1, max_length=200)
+    repository_path: str = Field(..., description="Repository path for git monitoring")
+    description: Optional[str] = Field(None, description="Project description", max_length=1000)
+    git_remote_url: Optional[str] = Field(None, description="Git remote repository URL")
+    git_branch: str = Field(default="main", description="Git branch to monitor")
+
+    @validator('name')
+    def validate_name(cls, v):
+        if not v.strip():
+            raise ValueError("Project name cannot be empty")
+        return v.strip()
+
+    @validator('repository_path')
+    def validate_path(cls, v):
+        if not v.strip():
+            raise ValueError("Repository path cannot be empty")
+        return v.strip()
+
+
+class ProjectDetailResponse(BaseModel):
+    status: RequestStatus = RequestStatus.SUCCESS
+    project_id: str
+    name: str
+    repository_path: str
+    description: Optional[str] = None
+    git_remote_url: Optional[str] = None
+    git_branch: str = "main"
+    project_status: str = Field(..., description="Project status (active, archived, etc.)")
+    created_at: str
+    updated_at: str
+    total_chunks: int
+    total_files: int
+    last_indexed_at: Optional[str] = None
+    timestamp: float = Field(default_factory=time.time)
+
+
+class ProjectCreateResponse(BaseModel):
+    status: RequestStatus = RequestStatus.SUCCESS
+    message: str
+    project_id: str
+    name: str
+    repository_path: str
+    git_remote_url: Optional[str] = None
+    git_branch: str = "main"
+    created_at: str
+    timestamp: float = Field(default_factory=time.time)
+
+
+class ProjectUpdateRequest(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    repository_path: Optional[str] = Field(None)
+    description: Optional[str] = Field(None, max_length=1000)
+    git_remote_url: Optional[str] = Field(None, description="Git remote repository URL")
+    git_branch: Optional[str] = Field(None, description="Git branch to monitor")
+    status: Optional[str] = Field(None, description="Project status (active, archived)")
+
+    @validator('name')
+    def validate_name(cls, v):
+        if v is not None and not v.strip():
+            raise ValueError("Project name cannot be empty")
+        return v.strip() if v else None
+
+    @validator('status')
+    def validate_status(cls, v):
+        if v is not None and v not in ['active', 'archived', 'initializing']:
+            raise ValueError("Invalid status. Must be 'active', 'archived', or 'initializing'")
+        return v
+
+
+class ProjectUpdateResponse(BaseModel):
+    status: RequestStatus = RequestStatus.SUCCESS
+    message: str
+    project: ProjectDetailResponse
+    timestamp: float = Field(default_factory=time.time)
+
+
+class ProjectDeleteResponse(BaseModel):
+    status: RequestStatus = RequestStatus.SUCCESS
+    message: str
+    project_id: str
+    chunks_deleted: int = 0
+    timestamp: float = Field(default_factory=time.time)

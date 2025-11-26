@@ -181,6 +181,56 @@ class VectorStore:
 
         return self.client.get_chunk_by_id(chunk_id)
 
+    def delete_by_metadata(self, filters: Dict[str, Any]) -> BulkOperationResult:
+        """Delete all chunks matching metadata filters"""
+        if not self._ensure_connected():
+            return BulkOperationResult(
+                operation_type="delete",
+                total_items=0,
+                successful_items=0,
+                failed_items=0,
+                processing_time=0.0,
+                errors=["Database not connected"]
+            )
+
+        logger.info("Deleting chunks by metadata", filters=filters)
+
+        try:
+            # Find all chunks matching the filters
+            matching_chunks = self.search_by_metadata(filters, limit=10000)
+            chunk_ids = [chunk.chunk_id for chunk in matching_chunks]
+
+            if not chunk_ids:
+                logger.info("No chunks found matching filters", filters=filters)
+                return BulkOperationResult(
+                    operation_type="delete",
+                    total_items=0,
+                    successful_items=0,
+                    failed_items=0,
+                    processing_time=0.0
+                )
+
+            # Delete the chunks
+            result = self.client.delete_chunks(chunk_ids)
+            logger.info("Chunks deleted by metadata",
+                        filters=filters,
+                        chunks_deleted=result.successful_items)
+
+            return result
+
+        except Exception as e:
+            logger.error("Failed to delete chunks by metadata",
+                         filters=filters,
+                         error=str(e))
+            return BulkOperationResult(
+                operation_type="delete",
+                total_items=0,
+                successful_items=0,
+                failed_items=0,
+                processing_time=0.0,
+                errors=[str(e)]
+            )
+
     def delete_chunks_by_file(self, file_path: str) -> BulkOperationResult:
         """Delete all chunks from a specific file"""
         if not self._ensure_connected():

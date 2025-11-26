@@ -57,6 +57,8 @@ class UpdateRequest:
     force_full_update: bool = False
     include_patterns: List[str] = None
     exclude_patterns: List[str] = None
+    project_id: Optional[str] = None  # Project ID for multi-project support
+    project_name: Optional[str] = None  # Project name for multi-project support
     created_at: float = None
 
     def __post_init__(self):

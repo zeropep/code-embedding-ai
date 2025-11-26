@@ -169,26 +169,30 @@ class UpdateService:
             self.state_manager.save_update_result(result)
             return result
 
-    async def quick_update(self, repo_path: str = None) -> UpdateResult:
+    async def quick_update(self, repo_path: str = None, project_id: str = None, project_name: str = None) -> UpdateResult:
         """Perform a quick update check"""
         repo_path = repo_path or self.repo_path
 
         request = UpdateRequest(
             request_id=f"quick_update_{int(time.time())}",
             repo_path=repo_path,
-            force_full_update=False
+            force_full_update=False,
+            project_id=project_id,
+            project_name=project_name
         )
 
         return await self.request_update(request)
 
-    async def force_full_update(self, repo_path: str = None) -> UpdateResult:
+    async def force_full_update(self, repo_path: str = None, project_id: str = None, project_name: str = None) -> UpdateResult:
         """Force a complete repository scan and update"""
         repo_path = repo_path or self.repo_path
 
         request = UpdateRequest(
             request_id=f"full_update_{int(time.time())}",
             repo_path=repo_path,
-            force_full_update=True
+            force_full_update=True,
+            project_id=project_id,
+            project_name=project_name
         )
 
         return await self.request_update(request)
@@ -196,6 +200,31 @@ class UpdateService:
     async def _detect_changes(self, request: UpdateRequest) -> Optional[ChangeDetectionResult]:
         """Detect changes in the repository"""
         try:
+            # Pull latest changes from remote if project_id is provided
+            if request.project_id:
+                try:
+                    from ..database.project_repository import ProjectRepository
+                    project_repo = ProjectRepository()
+                    project = project_repo.get(request.project_id)
+
+                    if project and project.git_remote_url:
+                        logger.info("Pulling latest changes from remote",
+                                   project_id=request.project_id,
+                                   remote_url=project.git_remote_url,
+                                   branch=project.git_branch)
+
+                        # Add or update remote
+                        if self.git_monitor.add_remote("origin", project.git_remote_url):
+                            # Pull latest changes
+                            if self.git_monitor.pull_latest("origin", project.git_branch):
+                                logger.info("Successfully pulled latest changes")
+                            else:
+                                logger.warning("Failed to pull latest changes, continuing with local state")
+                        else:
+                            logger.warning("Failed to add remote, continuing with local state")
+                except Exception as e:
+                    logger.warning("Failed to pull from remote, continuing with local state", error=str(e))
+
             if request.force_full_update or self.state_manager.should_force_full_update():
                 # Force full scan
                 logger.info("Performing full repository scan")
@@ -242,7 +271,7 @@ class UpdateService:
 
             # Process new/modified files
             if files_to_process:
-                await self._process_files(files_to_process, result)
+                await self._process_files(files_to_process, result, request)
 
             result.status = UpdateStatus.COMPLETED
 
@@ -272,7 +301,7 @@ class UpdateService:
                              error=str(e))
                 result.warnings.append(f"Failed to delete {file_path}: {str(e)}")
 
-    async def _process_files(self, file_paths: List[str], result: UpdateResult):
+    async def _process_files(self, file_paths: List[str], result: UpdateResult, request: UpdateRequest = None):
         """Process new/modified files"""
         logger.info("Processing files", count=len(file_paths))
 
@@ -305,6 +334,15 @@ class UpdateService:
             if not all_chunks:
                 logger.warning("No chunks extracted from files")
                 return
+
+            # Set project metadata on all chunks if provided
+            if request and (request.project_id or request.project_name):
+                for chunk in all_chunks:
+                    chunk.project_id = request.project_id
+                    chunk.project_name = request.project_name
+                logger.info("Project metadata set on chunks",
+                           project_id=request.project_id,
+                           project_name=request.project_name)
 
             logger.info("Files parsed", files_count=len(parsed_files), chunks_count=len(all_chunks))
 
