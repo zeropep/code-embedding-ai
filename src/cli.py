@@ -20,20 +20,13 @@ from .embeddings.models import EmbeddingConfig
 from .database.models import VectorDBConfig
 from .database.vector_store import VectorStore
 from .updates.update_service import UpdateService
+from .config.logging_config import setup_file_logging, get_logger
 
 
-# Configure logging for CLI
-structlog.configure(
-    processors=[
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.dev.ConsoleRenderer()
-    ],
-    wrapper_class=structlog.make_filtering_bound_logger(20),  # INFO level
-    logger_factory=structlog.PrintLoggerFactory(),
-    cache_logger_on_first_use=True,
-)
+# Configure file-based logging on module import
+setup_file_logging()
 
-logger = structlog.get_logger(__name__)
+logger = get_logger(__name__)
 
 
 @click.group()
@@ -45,10 +38,8 @@ def cli(ctx, config, verbose):
     ctx.ensure_object(dict)
 
     if verbose:
-        # Enable debug logging
-        structlog.configure(
-            wrapper_class=structlog.make_filtering_bound_logger(10)  # DEBUG level
-        )
+        # Enable debug logging by reconfiguring with DEBUG level
+        setup_file_logging(log_level="DEBUG")
 
     ctx.obj['config_file'] = config
     ctx.obj['verbose'] = verbose
