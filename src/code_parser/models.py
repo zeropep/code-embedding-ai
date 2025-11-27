@@ -112,6 +112,7 @@ class ParserConfig:
     extract_classes: bool = True
     extract_interfaces: bool = True
     supported_extensions: List[str] = None
+    excluded_dirs: List[str] = None
 
     def __post_init__(self):
         if self.supported_extensions is None:
@@ -119,4 +120,18 @@ class ParserConfig:
                 ".java", ".kt", ".kts", ".html", ".htm",
                 ".xml", ".yml", ".yaml", ".properties",
                 ".py", ".pyw"  # Python files
+            ]
+        if self.excluded_dirs is None:
+            self.excluded_dirs = [
+                ".venv", "venv", ".env",
+                "node_modules", "bower_components",
+                ".git", ".svn", ".hg",
+                "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache",
+                "chroma_db", "chromadb",
+                "dist", "build", "target", "out",
+                ".idea", ".vscode", ".vs",
+                "coverage", ".coverage", "htmlcov",
+                ".tox", ".nox",
+                "logs", "log",
+                ".DS_Store", "Thumbs.db"
             ]

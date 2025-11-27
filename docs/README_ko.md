@@ -64,7 +64,11 @@ from src.security.models import SecurityConfig
 from src.embeddings.models import EmbeddingConfig
 
 # 파이프라인 구성
-parser_config = ParserConfig(min_tokens=50, max_tokens=500)
+parser_config = ParserConfig(
+    min_tokens=50,
+    max_tokens=500,
+    excluded_dirs=[".venv", "node_modules", "__pycache__"]  # 디렉토리 제외
+)
 security_config = SecurityConfig(enabled=True)
 embedding_config = EmbeddingConfig(api_key="your-api-key")
 
@@ -72,7 +76,8 @@ embedding_config = EmbeddingConfig(api_key="your-api-key")
 pipeline = EmbeddingPipeline(
     parser_config=parser_config,
     security_config=security_config,
-    embedding_config=embedding_config
+    embedding_config=embedding_config,
+    chunk_batch_size=100  # 한 번에 100개 청크 처리
 )
 
 # 저장소 처리
@@ -179,6 +184,18 @@ parser:
   max_tokens: 500
   overlap_tokens: 50
   supported_extensions: [".java", ".kt", ".html", ".py"]
+  excluded_dirs:
+    - ".venv"
+    - "venv"
+    - "node_modules"
+    - "__pycache__"
+    - ".pytest_cache"
+    - "chroma_db"
+    - "dist"
+    - "build"
+    - ".git"
+    - ".idea"
+    - ".vscode"
 
 security:
   enabled: true
@@ -202,6 +219,76 @@ monitoring:
   enable_alerting: true
   log_level: "INFO"
 ```
+
+### 파서 구성 상세 설정
+
+#### 제외 디렉토리
+
+기본적으로 파서는 임베딩하지 말아야 할 일반적인 디렉토리를 자동으로 제외합니다:
+
+**개발 환경:**
+- `.venv`, `venv`, `.env` - Python 가상환경
+- `node_modules`, `bower_components` - JavaScript 의존성
+
+**버전 관리:**
+- `.git`, `.svn`, `.hg` - VCS 디렉토리
+
+**Python 캐시:**
+- `__pycache__`, `.pytest_cache`, `.mypy_cache`, `.ruff_cache`
+
+**빌드 결과물:**
+- `dist`, `build`, `target`, `out`
+
+**IDE 설정:**
+- `.idea`, `.vscode`, `.vs`
+
+**테스트/커버리지:**
+- `coverage`, `.coverage`, `htmlcov`, `.tox`, `.nox`
+
+**데이터베이스:**
+- `chroma_db`, `chromadb` - 벡터 데이터베이스 저장소
+
+**기타:**
+- `logs`, `log` - 로그 파일
+- `.DS_Store`, `Thumbs.db` - OS 파일
+
+`excluded_dirs` 매개변수를 사용하여 이 목록을 커스터마이징할 수 있습니다:
+
+```python
+from src.code_parser.models import ParserConfig
+
+# 커스텀 제외 설정
+parser_config = ParserConfig(
+    excluded_dirs=[
+        ".venv", "node_modules",  # 기본 제외
+        "generated", "migrations",  # 커스텀 제외
+        "vendor", "third_party"
+    ]
+)
+```
+
+#### 배치 크기 구성
+
+한 번에 처리할 코드 청크 수를 제어합니다:
+
+```python
+from src.embeddings.embedding_pipeline import EmbeddingPipeline
+
+pipeline = EmbeddingPipeline(
+    chunk_batch_size=100  # GPU용 권장값
+)
+
+# CPU 처리 시 작은 배치 사용:
+# chunk_batch_size=50
+
+# 고성능 GPU (24GB+):
+# chunk_batch_size=200
+```
+
+**배치 크기 가이드라인:**
+- **CPU**: 10-50 청크 (느리지만 메모리 안전)
+- **GPU (12GB)**: 100-150 청크 (권장)
+- **GPU (24GB+)**: 200-500 청크 (고성능)
 
 ## API 참조
 

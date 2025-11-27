@@ -64,7 +64,11 @@ from src.security.models import SecurityConfig
 from src.embeddings.models import EmbeddingConfig
 
 # Configure pipeline
-parser_config = ParserConfig(min_tokens=50, max_tokens=500)
+parser_config = ParserConfig(
+    min_tokens=50,
+    max_tokens=500,
+    excluded_dirs=[".venv", "node_modules", "__pycache__"]  # Exclude directories
+)
 security_config = SecurityConfig(enabled=True)
 embedding_config = EmbeddingConfig(api_key="your-api-key")
 
@@ -72,7 +76,8 @@ embedding_config = EmbeddingConfig(api_key="your-api-key")
 pipeline = EmbeddingPipeline(
     parser_config=parser_config,
     security_config=security_config,
-    embedding_config=embedding_config
+    embedding_config=embedding_config,
+    chunk_batch_size=100  # Process 100 chunks at a time
 )
 
 # Process repository
@@ -148,6 +153,18 @@ parser:
   max_tokens: 500
   overlap_tokens: 50
   supported_extensions: [".java", ".kt", ".html", ".py"]
+  excluded_dirs:
+    - ".venv"
+    - "venv"
+    - "node_modules"
+    - "__pycache__"
+    - ".pytest_cache"
+    - "chroma_db"
+    - "dist"
+    - "build"
+    - ".git"
+    - ".idea"
+    - ".vscode"
 
 security:
   enabled: true
@@ -171,6 +188,76 @@ monitoring:
   enable_alerting: true
   log_level: "INFO"
 ```
+
+### Parser Configuration Details
+
+#### Excluded Directories
+
+By default, the parser automatically excludes common directories that should not be embedded:
+
+**Development Environments:**
+- `.venv`, `venv`, `.env` - Python virtual environments
+- `node_modules`, `bower_components` - JavaScript dependencies
+
+**Version Control:**
+- `.git`, `.svn`, `.hg` - VCS directories
+
+**Python Caches:**
+- `__pycache__`, `.pytest_cache`, `.mypy_cache`, `.ruff_cache`
+
+**Build Artifacts:**
+- `dist`, `build`, `target`, `out`
+
+**IDE Settings:**
+- `.idea`, `.vscode`, `.vs`
+
+**Test/Coverage:**
+- `coverage`, `.coverage`, `htmlcov`, `.tox`, `.nox`
+
+**Databases:**
+- `chroma_db`, `chromadb` - Vector database storage
+
+**Other:**
+- `logs`, `log` - Log files
+- `.DS_Store`, `Thumbs.db` - OS files
+
+You can customize this list using the `excluded_dirs` parameter:
+
+```python
+from src.code_parser.models import ParserConfig
+
+# Add custom exclusions
+parser_config = ParserConfig(
+    excluded_dirs=[
+        ".venv", "node_modules",  # Default exclusions
+        "generated", "migrations",  # Custom exclusions
+        "vendor", "third_party"
+    ]
+)
+```
+
+#### Batch Size Configuration
+
+Control how many code chunks are processed at once:
+
+```python
+from src.embeddings.embedding_pipeline import EmbeddingPipeline
+
+pipeline = EmbeddingPipeline(
+    chunk_batch_size=100  # Process 100 chunks per batch (recommended for GPU)
+)
+
+# For CPU processing, use smaller batches:
+# chunk_batch_size=50
+
+# For high-memory GPU (24GB+):
+# chunk_batch_size=200
+```
+
+**Batch Size Guidelines:**
+- **CPU**: 10-50 chunks (slower, memory safe)
+- **GPU (12GB)**: 100-150 chunks (recommended)
+- **GPU (24GB+)**: 200-500 chunks (high performance)
 
 ## API Reference
 

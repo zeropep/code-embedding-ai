@@ -118,21 +118,29 @@ class LocalEmbeddingClient:
             # Generate embedding in thread pool to avoid blocking
             loop = asyncio.get_event_loop()
 
-            def encode_single():
+            def encode_single(model, text, task_value):
                 try:
-                    return self.model.encode(
-                        [sanitized],
+                    return model.encode(
+                        [text],
                         convert_to_numpy=False,
-                        prompt_name=task_type.value
+                        prompt_name=task_value,
+                        show_progress_bar=False
                     )[0]
                 except TypeError:
                     # Fallback if prompt_name is not supported
-                    return self.model.encode(
-                        [sanitized],
-                        convert_to_numpy=False
-                    )[0]
+                    try:
+                        return model.encode(
+                            [text],
+                            convert_to_numpy=False,
+                            show_progress_bar=False
+                        )[0]
+                    except Exception:
+                        # Final fallback
+                        return model.encode([text], convert_to_numpy=False)[0]
 
-            embedding_vector = await loop.run_in_executor(None, encode_single)
+            from functools import partial
+            encode_fn = partial(encode_single, self.model, sanitized, task_type.value)
+            embedding_vector = await loop.run_in_executor(None, encode_fn)
 
             # Convert to list if needed
             if not isinstance(embedding_vector, list):
@@ -241,24 +249,34 @@ class LocalEmbeddingClient:
                     # Generate embeddings in thread pool
                     async with self._rate_limiter:
                         loop = asyncio.get_event_loop()
-                        # Use a proper function instead of lambda to avoid closure issues
-                        def encode_batch():
+
+                        # Create a wrapper function with explicit parameters to avoid closure issues
+                        def encode_batch(model, contents, task_value, batch_size):
                             try:
-                                return self.model.encode(
-                                    valid_contents,
+                                return model.encode(
+                                    contents,
                                     convert_to_numpy=False,
-                                    prompt_name=task_type.value,
-                                    batch_size=self.config.batch_size
+                                    prompt_name=task_value,
+                                    batch_size=batch_size,
+                                    show_progress_bar=False  # Disable progress bar in thread
                                 )
                             except TypeError:
                                 # Fallback if prompt_name is not supported
-                                return self.model.encode(
-                                    valid_contents,
-                                    convert_to_numpy=False,
-                                    batch_size=self.config.batch_size
-                                )
+                                try:
+                                    return model.encode(
+                                        contents,
+                                        convert_to_numpy=False,
+                                        batch_size=batch_size,
+                                        show_progress_bar=False
+                                    )
+                                except Exception:
+                                    # Final fallback with minimal parameters
+                                    return model.encode(contents, convert_to_numpy=False)
 
-                        embedding_vectors = await loop.run_in_executor(None, encode_batch)
+                        # Use functools.partial to avoid closure issues on Windows
+                        from functools import partial
+                        encode_fn = partial(encode_batch, self.model, valid_contents, task_type.value, self.config.batch_size)
+                        embedding_vectors = await loop.run_in_executor(None, encode_fn)
 
                         # Convert to list if needed
                         if not isinstance(embedding_vectors, list):

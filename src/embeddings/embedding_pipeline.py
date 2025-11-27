@@ -24,7 +24,7 @@ class EmbeddingPipeline:
                  embedding_config: EmbeddingConfig = None,
                  vector_config: VectorDBConfig = None,
                  auto_save: bool = True,
-                 chunk_batch_size: int = 1000):
+                 chunk_batch_size: int = 100):
 
         # Initialize configurations
         self.parser_config = parser_config or ParserConfig()

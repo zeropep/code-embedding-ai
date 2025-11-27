@@ -120,21 +120,31 @@ class CodeParser:
 
     def _should_ignore_file(self, file_path: Path) -> bool:
         """Check if file should be ignored"""
-        ignore_patterns = [
-            ".git/", "target/", "build/", "node_modules/",
-            ".idea/", ".vscode/", "__pycache__/",
-            "*.class", "*.jar", "*.war", "*.log"
+        # File extension ignore patterns
+        ignore_file_patterns = [
+            "*.class", "*.jar", "*.war", "*.log", "*.pyc", "*.pyo",
+            "*.so", "*.dll", "*.dylib", "*.exe",
+            "*.zip", "*.tar", "*.gz", "*.rar",
+            "*.jpg", "*.jpeg", "*.png", "*.gif", "*.ico", "*.svg",
+            "*.pdf", "*.doc", "*.docx", "*.xls", "*.xlsx"
         ]
 
         file_str = str(file_path).replace('\\', '/')
 
-        for pattern in ignore_patterns:
-            if pattern.endswith('/'):
-                if pattern[:-1] in file_str:
-                    return True
-            else:
-                if file_str.endswith(pattern.replace('*', '')):
-                    return True
+        # Check excluded directories from config
+        for excluded_dir in self.config.excluded_dirs:
+            # Check if any part of the path contains the excluded directory
+            path_parts = file_str.split('/')
+            if excluded_dir in path_parts:
+                return True
+            # Also check as substring (for hidden folders like .venv)
+            if f"/{excluded_dir}/" in file_str or file_str.startswith(f"{excluded_dir}/"):
+                return True
+
+        # Check file patterns
+        for pattern in ignore_file_patterns:
+            if file_str.endswith(pattern.replace('*', '')):
+                return True
 
         return False
 
