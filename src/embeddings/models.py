@@ -14,6 +14,19 @@ class EmbeddingStatus(Enum):
     RETRYING = "retrying"
 
 
+class EmbeddingTaskType(Enum):
+    """Task-specific prefixes for jina-code-embeddings-1.5b model
+
+    Model supports both _query and _document variants for each task.
+    For embeddings, we use _query variants to match against stored code.
+    """
+    NL2CODE = "nl2code_query"  # Natural language to code search (default for semantic search)
+    CODE2CODE = "code2code_query"  # Code to code similarity (for finding similar code)
+    CODE2NL = "code2nl_query"  # Code to natural language (for code explanations)
+    CODE2COMPLETION = "code2completion_query"  # Code completion tasks
+    QA = "qa_query"  # Technical Q&A
+
+
 @dataclass
 class EmbeddingRequest:
     """Request for embedding generation"""
@@ -77,10 +90,10 @@ class BatchEmbeddingRequest:
 @dataclass
 class EmbeddingConfig:
     """Configuration for embedding generation"""
-    model_name: str = "jinaai/jina-embeddings-v2-base-code"
+    model_name: str = "jinaai/jina-code-embeddings-1.5b"
     api_url: str = "https://api.jina.ai/v1/embeddings"
     api_key: str = ""
-    dimensions: int = 768
+    dimensions: int = 1536
     max_retries: int = 3
     retry_delay: float = 1.0
     timeout: int = 30

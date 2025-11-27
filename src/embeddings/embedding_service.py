@@ -6,7 +6,7 @@ import structlog
 from .jina_client import JinaEmbeddingClient
 from .local_embedding_client import LocalEmbeddingClient
 from .models import (EmbeddingConfig, EmbeddingRequest, EmbeddingResult,
-                     EmbeddingStatus, EmbeddingMetrics)
+                     EmbeddingStatus, EmbeddingMetrics, EmbeddingTaskType)
 from ..code_parser.models import CodeChunk
 
 
@@ -123,8 +123,14 @@ class EmbeddingService:
 
         return embedded_chunks
 
-    async def generate_embeddings_async(self, requests: List[EmbeddingRequest]) -> List[EmbeddingResult]:
-        """Generate embeddings asynchronously"""
+    async def generate_embeddings_async(self, requests: List[EmbeddingRequest],
+                                        task_type: EmbeddingTaskType = EmbeddingTaskType.CODE2CODE) -> List[EmbeddingResult]:
+        """Generate embeddings asynchronously
+
+        Args:
+            requests: List of embedding requests
+            task_type: Task-specific prefix for jina-code-embeddings-1.5b (default: CODE2CODE for code similarity)
+        """
         if not requests:
             return []
 
@@ -134,7 +140,7 @@ class EmbeddingService:
 
         try:
             async with self.client as client:
-                results = await client.generate_embeddings_batch(contents, request_ids)
+                results = await client.generate_embeddings_batch(contents, request_ids, task_type)
 
             # Update metrics
             for result in results:

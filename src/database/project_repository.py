@@ -246,6 +246,25 @@ class ProjectRepository:
         """Check if a project exists"""
         return self.get(project_id) is not None
 
+    def reset_all(self) -> bool:
+        """Delete all projects from database"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+
+            cursor.execute("DELETE FROM projects")
+            deleted_count = cursor.rowcount
+
+            conn.commit()
+            conn.close()
+
+            logger.warning("All projects deleted from database", deleted_count=deleted_count)
+            return True
+
+        except Exception as e:
+            logger.error("Failed to reset projects database", error=str(e))
+            return False
+
     def _row_to_project(self, row: sqlite3.Row) -> Project:
         """Convert database row to Project object"""
         return Project(

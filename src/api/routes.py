@@ -482,15 +482,18 @@ async def process_project(
         # Update project statistics
         if result.get("processing_summary"):
             summary = result["processing_summary"]
+            total_chunks = summary.get("chunks_with_embeddings", 0)
+            total_files = summary.get("total_files_parsed", 0)
             project_repo.update(project_id, {
-                "total_chunks": summary.get("total_chunks", 0),
-                "total_files": summary.get("files_processed", 0),
+                "total_chunks": total_chunks,
+                "total_files": total_files,
                 "last_indexed_at": datetime.now(),
                 "status": "active"
             })
             logger.info("Project statistics updated",
                        project_id=project_id,
-                       total_chunks=summary.get("total_chunks", 0))
+                       total_chunks=total_chunks,
+                       total_files=total_files)
 
         return ProcessRepositoryResponse(
             status=RequestStatus.SUCCESS,
@@ -614,22 +617,34 @@ async def reset_database(
     confirm: bool = Query(..., description="Confirmation flag"),
     vector_store: VectorStore = Depends(get_vector_store)
 ):
-    """Reset the entire vector database"""
+    """Reset the entire database (vector store and project metadata)"""
     if not confirm:
         raise HTTPException(status_code=400, detail="Reset operation must be confirmed")
 
     try:
-        logger.warning("Resetting vector database")
-        success = vector_store.reset_database()
+        logger.warning("Resetting entire database (vector store + projects)")
 
-        if success:
+        # Reset vector store (ChromaDB)
+        vector_success = vector_store.reset_database()
+
+        # Reset project repository
+        from ..database.project_repository import ProjectRepository
+        project_repo = ProjectRepository()
+        project_success = project_repo.reset_all()
+
+        if vector_success and project_success:
             return {
                 "status": "success",
-                "message": "Database reset successfully",
+                "message": "Database reset successfully (vector store + projects)",
                 "timestamp": time.time()
             }
         else:
-            raise HTTPException(status_code=500, detail="Database reset failed")
+            error_details = []
+            if not vector_success:
+                error_details.append("vector store reset failed")
+            if not project_success:
+                error_details.append("project reset failed")
+            raise HTTPException(status_code=500, detail=f"Reset failed: {', '.join(error_details)}")
 
     except Exception as e:
         logger.error("Database reset failed", error=str(e))
@@ -651,17 +666,13 @@ async def list_projects(
         project_repo = ProjectRepository()
         all_projects = project_repo.get_all()
 
-        # Get chunk counts from vector store for each project
+        # Build project list with chunk counts from project metadata
         projects = []
         for project in all_projects:
-            # Get stats from vector store
-            stats = vector_store.get_project_stats(project.project_id)
-            chunk_count = stats.get('total_chunks', 0) if 'error' not in stats else 0
-
             projects.append(ProjectInfo(
                 id=project.project_id,
                 name=project.name,
-                chunk_count=chunk_count
+                chunk_count=project.total_chunks
             ))
 
         logger.info("Projects listed", total_projects=len(projects))

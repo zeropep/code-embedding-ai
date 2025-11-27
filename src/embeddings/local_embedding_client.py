@@ -4,7 +4,7 @@ import time
 from typing import List, Dict, Any, Optional, Tuple
 import structlog
 
-from .models import EmbeddingConfig, EmbeddingResult, EmbeddingStatus
+from .models import EmbeddingConfig, EmbeddingResult, EmbeddingStatus, EmbeddingTaskType
 
 
 logger = structlog.get_logger(__name__)
@@ -83,15 +83,22 @@ class LocalEmbeddingClient:
             logger.info("Closing local embedding client")
             self._model_loaded = False
 
-    async def generate_embedding(self, content: str, request_id: str = "") -> EmbeddingResult:
-        """Generate embedding for single content"""
+    async def generate_embedding(self, content: str, request_id: str = "",
+                                 task_type: EmbeddingTaskType = EmbeddingTaskType.CODE2CODE) -> EmbeddingResult:
+        """Generate embedding for single content
+
+        Args:
+            content: Text to embed
+            request_id: Request identifier
+            task_type: Task-specific prefix for jina-code-embeddings-1.5b
+        """
         start_time = time.time()
 
-        # Check cache first
+        # Check cache first (include task_type in cache key)
         if self.config.enable_caching:
-            cached_vector = self._get_cached_embedding(content)
+            cached_vector = self._get_cached_embedding(content, task_type)
             if cached_vector:
-                logger.debug("Cache hit for embedding", request_id=request_id)
+                logger.debug("Cache hit for embedding", request_id=request_id, task_type=task_type.value)
                 return EmbeddingResult(
                     request_id=request_id,
                     vector=cached_vector,
@@ -110,10 +117,22 @@ class LocalEmbeddingClient:
 
             # Generate embedding in thread pool to avoid blocking
             loop = asyncio.get_event_loop()
-            embedding_vector = await loop.run_in_executor(
-                None,
-                lambda: self.model.encode([sanitized], convert_to_numpy=False)[0]
-            )
+
+            def encode_single():
+                try:
+                    return self.model.encode(
+                        [sanitized],
+                        convert_to_numpy=False,
+                        prompt_name=task_type.value
+                    )[0]
+                except TypeError:
+                    # Fallback if prompt_name is not supported
+                    return self.model.encode(
+                        [sanitized],
+                        convert_to_numpy=False
+                    )[0]
+
+            embedding_vector = await loop.run_in_executor(None, encode_single)
 
             # Convert to list if needed
             if not isinstance(embedding_vector, list):
@@ -121,7 +140,7 @@ class LocalEmbeddingClient:
 
             # Cache the result
             if self.config.enable_caching:
-                self._cache_embedding(content, embedding_vector)
+                self._cache_embedding(content, embedding_vector, task_type)
 
             return EmbeddingResult(
                 request_id=request_id,
@@ -144,8 +163,15 @@ class LocalEmbeddingClient:
             )
 
     async def generate_embeddings_batch(self, contents: List[str],
-                                        request_ids: List[str] = None) -> List[EmbeddingResult]:
-        """Generate embeddings for multiple contents in batch"""
+                                        request_ids: List[str] = None,
+                                        task_type: EmbeddingTaskType = EmbeddingTaskType.CODE2CODE) -> List[EmbeddingResult]:
+        """Generate embeddings for multiple contents in batch
+
+        Args:
+            contents: List of texts to embed
+            request_ids: Optional list of request identifiers
+            task_type: Task-specific prefix for jina-code-embeddings-1.5b
+        """
         if request_ids is None:
             request_ids = [f"batch_{i}" for i in range(len(contents))]
 
@@ -154,7 +180,8 @@ class LocalEmbeddingClient:
 
         logger.info("Generating batch embeddings (local)",
                     batch_size=len(contents),
-                    model=self.config.model_name)
+                    model=self.config.model_name,
+                    task_type=task_type.value)
 
         # Process in chunks to respect batch size limits
         results = []
@@ -162,14 +189,21 @@ class LocalEmbeddingClient:
             chunk_contents = contents[i:i + self.config.batch_size]
             chunk_ids = request_ids[i:i + self.config.batch_size]
 
-            chunk_results = await self._process_batch_chunk(chunk_contents, chunk_ids)
+            chunk_results = await self._process_batch_chunk(chunk_contents, chunk_ids, task_type)
             results.extend(chunk_results)
 
         return results
 
     async def _process_batch_chunk(self, contents: List[str],
-                                   request_ids: List[str]) -> List[EmbeddingResult]:
-        """Process a single batch chunk"""
+                                   request_ids: List[str],
+                                   task_type: EmbeddingTaskType = EmbeddingTaskType.CODE2CODE) -> List[EmbeddingResult]:
+        """Process a single batch chunk
+
+        Args:
+            contents: List of texts to embed
+            request_ids: List of request identifiers
+            task_type: Task-specific prefix for jina-code-embeddings-1.5b
+        """
         start_time = time.time()
 
         # Separate cached and non-cached contents
@@ -180,7 +214,7 @@ class LocalEmbeddingClient:
 
         if self.config.enable_caching:
             for idx, (content, req_id) in enumerate(zip(contents, request_ids)):
-                cached_vector = self._get_cached_embedding(content)
+                cached_vector = self._get_cached_embedding(content, task_type)
                 if cached_vector:
                     cached_results.append((idx, req_id, cached_vector))
                 else:
@@ -207,10 +241,24 @@ class LocalEmbeddingClient:
                     # Generate embeddings in thread pool
                     async with self._rate_limiter:
                         loop = asyncio.get_event_loop()
-                        embedding_vectors = await loop.run_in_executor(
-                            None,
-                            lambda: self.model.encode(valid_contents, convert_to_numpy=False)
-                        )
+                        # Use a proper function instead of lambda to avoid closure issues
+                        def encode_batch():
+                            try:
+                                return self.model.encode(
+                                    valid_contents,
+                                    convert_to_numpy=False,
+                                    prompt_name=task_type.value,
+                                    batch_size=self.config.batch_size
+                                )
+                            except TypeError:
+                                # Fallback if prompt_name is not supported
+                                return self.model.encode(
+                                    valid_contents,
+                                    convert_to_numpy=False,
+                                    batch_size=self.config.batch_size
+                                )
+
+                        embedding_vectors = await loop.run_in_executor(None, encode_batch)
 
                         # Convert to list if needed
                         if not isinstance(embedding_vectors, list):
@@ -230,7 +278,7 @@ class LocalEmbeddingClient:
 
                                 # Cache the result
                                 if self.config.enable_caching:
-                                    self._cache_embedding(content, vector)
+                                    self._cache_embedding(content, vector, task_type)
 
                                 api_results.append((uncached_indices[i], EmbeddingResult(
                                     request_id=req_id,
@@ -282,16 +330,19 @@ class LocalEmbeddingClient:
         if not text:
             return ""
 
-        # Remove null bytes and other control characters (except newlines and tabs)
+        import re
+
+        # Remove null bytes and other dangerous control characters
+        # Keep printable characters and common whitespace (newline, tab, carriage return)
         sanitized = ''.join(
             char for char in text
-            if char == '\n' or char == '\t' or char == '\r'
-            or (ord(char) >= 32 and ord(char) <= 126)
-            or (ord(char) >= 160)
+            if char.isprintable() or char in '\n\t\r '
         )
 
+        # Remove any remaining null bytes explicitly
+        sanitized = sanitized.replace('\x00', '')
+
         # Replace multiple whitespace with single space
-        import re
         sanitized = re.sub(r'[ \t]+', ' ', sanitized)
         sanitized = re.sub(r'\n{3,}', '\n\n', sanitized)
 
@@ -302,16 +353,23 @@ class LocalEmbeddingClient:
 
         return sanitized.strip()
 
-    def _get_cache_key(self, content: str) -> str:
-        """Generate cache key for content"""
-        return hashlib.sha256(content.encode()).hexdigest()
+    def _get_cache_key(self, content: str, task_type: EmbeddingTaskType = EmbeddingTaskType.CODE2CODE) -> str:
+        """Generate cache key for content and task type"""
+        # Include task_type in cache key since embeddings differ by task
+        combined = f"{task_type.value}:{content}"
+        return hashlib.sha256(combined.encode('utf-8', errors='ignore')).hexdigest()
 
-    def _get_cached_embedding(self, content: str) -> Optional[List[float]]:
-        """Get cached embedding if available and not expired"""
+    def _get_cached_embedding(self, content: str, task_type: EmbeddingTaskType = EmbeddingTaskType.CODE2CODE) -> Optional[List[float]]:
+        """Get cached embedding if available and not expired
+
+        Args:
+            content: Text content
+            task_type: Task-specific prefix (impacts embedding)
+        """
         if not self.config.enable_caching:
             return None
 
-        cache_key = self._get_cache_key(content)
+        cache_key = self._get_cache_key(content, task_type)
         if cache_key in self._cache:
             vector, timestamp = self._cache[cache_key]
             if time.time() - timestamp < self.config.cache_ttl:
@@ -322,12 +380,18 @@ class LocalEmbeddingClient:
 
         return None
 
-    def _cache_embedding(self, content: str, vector: List[float]):
-        """Cache embedding result"""
+    def _cache_embedding(self, content: str, vector: List[float], task_type: EmbeddingTaskType = EmbeddingTaskType.CODE2CODE):
+        """Cache embedding result
+
+        Args:
+            content: Text content
+            vector: Embedding vector
+            task_type: Task-specific prefix (impacts embedding)
+        """
         if not self.config.enable_caching:
             return
 
-        cache_key = self._get_cache_key(content)
+        cache_key = self._get_cache_key(content, task_type)
         self._cache[cache_key] = (vector, time.time())
 
         # Simple cache size management
