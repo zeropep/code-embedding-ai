@@ -29,6 +29,8 @@ class ProcessRepositoryRequest(BaseModel):
     force_update: bool = Field(default=False, description="Force full update even if no changes detected")
     include_patterns: Optional[List[str]] = Field(default=None, description="File patterns to include")
     exclude_patterns: Optional[List[str]] = Field(default=None, description="File patterns to exclude")
+    project_id: Optional[str] = Field(default=None, description="Project ID for organizing chunks")
+    project_name: Optional[str] = Field(default=None, description="Project name for organizing chunks")
 
     @validator('repo_path')
     def validate_repo_path(cls, v):
@@ -207,6 +209,8 @@ class BatchProcessRequest(BaseModel):
     file_paths: List[str] = Field(..., description="List of file paths to process")
     update_existing: bool = Field(default=True, description="Update existing chunks")
     parallel_processing: bool = Field(default=True, description="Enable parallel processing")
+    project_id: Optional[str] = Field(default=None, description="Project ID for organizing chunks")
+    project_name: Optional[str] = Field(default=None, description="Project name for organizing chunks")
 
 
 class BatchDeleteRequest(BaseModel):

@@ -228,7 +228,9 @@ class EmbeddingService:
             class_name=chunk.class_name,
             layer_type=chunk.layer_type,
             token_count=chunk.token_count,
-            metadata=chunk.metadata.copy() if chunk.metadata else {}
+            metadata=chunk.metadata.copy() if chunk.metadata else {},
+            project_id=chunk.project_id,
+            project_name=chunk.project_name
         )
 
         # Add embedding metadata

@@ -252,26 +252,56 @@ class LocalEmbeddingClient:
 
                         # Create a wrapper function with explicit parameters to avoid closure issues
                         def encode_batch(model, contents, task_value, batch_size):
+                            import torch
+                            import gc
+
                             try:
-                                return model.encode(
-                                    contents,
-                                    convert_to_numpy=False,
-                                    prompt_name=task_value,
-                                    batch_size=batch_size,
-                                    show_progress_bar=False  # Disable progress bar in thread
-                                )
+                                # Use no_grad to prevent gradient computation (saves GPU memory)
+                                with torch.no_grad():
+                                    result = model.encode(
+                                        contents,
+                                        convert_to_numpy=False,
+                                        prompt_name=task_value,
+                                        batch_size=batch_size,
+                                        show_progress_bar=False  # Disable progress bar in thread
+                                    )
+
+                                # Clear GPU cache after encoding
+                                if torch.cuda.is_available():
+                                    torch.cuda.empty_cache()
+
+                                # Force garbage collection
+                                gc.collect()
+
+                                return result
+
                             except TypeError:
                                 # Fallback if prompt_name is not supported
                                 try:
-                                    return model.encode(
-                                        contents,
-                                        convert_to_numpy=False,
-                                        batch_size=batch_size,
-                                        show_progress_bar=False
-                                    )
+                                    with torch.no_grad():
+                                        result = model.encode(
+                                            contents,
+                                            convert_to_numpy=False,
+                                            batch_size=batch_size,
+                                            show_progress_bar=False
+                                        )
+
+                                    if torch.cuda.is_available():
+                                        torch.cuda.empty_cache()
+                                    gc.collect()
+
+                                    return result
+
                                 except Exception:
                                     # Final fallback with minimal parameters
-                                    return model.encode(contents, convert_to_numpy=False)
+                                    with torch.no_grad():
+                                        result = model.encode(contents, convert_to_numpy=False)
+
+                                    if torch.cuda.is_available():
+                                        torch.cuda.empty_cache()
+                                    gc.collect()
+
+                                    return result
 
                         # Use functools.partial to avoid closure issues on Windows
                         from functools import partial

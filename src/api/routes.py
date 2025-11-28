@@ -344,13 +344,21 @@ async def process_repository(
 
         if request.mode == ProcessingMode.FULL:
             # Process entire repository
-            result = await pipeline.process_repository(request.repo_path)
+            result = await pipeline.process_repository(
+                request.repo_path,
+                project_id=request.project_id,
+                project_name=request.project_name
+            )
         elif request.mode == ProcessingMode.INCREMENTAL:
             # Incremental processing would need UpdateService integration
             raise HTTPException(status_code=501, detail="Incremental mode not implemented in this endpoint")
         else:  # AUTO mode
             # Auto-detect best processing mode
-            result = await pipeline.process_repository(request.repo_path)
+            result = await pipeline.process_repository(
+                request.repo_path,
+                project_id=request.project_id,
+                project_name=request.project_name
+            )
 
         if result["status"] == "error":
             raise HTTPException(status_code=500, detail=result.get("error", "Processing failed"))
@@ -383,7 +391,11 @@ async def process_files(
                     request_id=request_id,
                     file_count=len(request.file_paths))
 
-        result = await pipeline.process_files(request.file_paths)
+        result = await pipeline.process_files(
+            request.file_paths,
+            project_id=request.project_id,
+            project_name=request.project_name
+        )
 
         if result["status"] == "error":
             raise HTTPException(status_code=500, detail=result.get("error", "Processing failed"))
