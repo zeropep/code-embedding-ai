@@ -419,29 +419,13 @@ async def process_files(
 async def trigger_update(
     repo_path: Optional[str] = None,
     force_full: bool = False,
-    update_service: UpdateService = Depends(get_update_service)
+    update_service: Optional[UpdateService] = Depends(get_update_service)
 ):
-    """Trigger an incremental update"""
-    try:
-        request_id = str(uuid.uuid4())
-
-        update_request = UpdateRequest(
-            request_id=request_id,
-            repo_path=repo_path or update_service.repo_path,
-            force_full_update=force_full
-        )
-
-        result = await update_service.request_update(update_request)
-
-        return {
-            "status": "success",
-            "message": "Update completed",
-            "result": result.to_dict()
-        }
-
-    except Exception as e:
-        logger.error("Update failed", error=str(e))
-        raise HTTPException(status_code=500, detail=f"Update failed: {str(e)}")
+    """Trigger an incremental update - DEPRECATED: Use /process/project/{project_id} instead"""
+    raise HTTPException(
+        status_code=410,
+        detail="This endpoint is deprecated. Use POST /process/project/{project_id} to process project repositories."
+    )
 
 
 @process_router.post("/project/{project_id}", response_model=ProcessRepositoryResponse)

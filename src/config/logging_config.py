@@ -6,6 +6,14 @@ import logging
 import logging.handlers
 import structlog
 from pathlib import Path
+from datetime import datetime, timezone, timedelta
+
+
+def kst_timestamper(logger, method_name, event_dict):
+    """Add KST timestamp to log entries"""
+    kst = timezone(timedelta(hours=9))
+    event_dict["timestamp"] = datetime.now(kst).isoformat()
+    return event_dict
 
 
 def setup_file_logging(log_dir: str = None, log_file: str = None, log_level: str = "INFO"):
@@ -65,7 +73,7 @@ def setup_file_logging(log_dir: str = None, log_file: str = None, log_level: str
             structlog.stdlib.add_logger_name,
             structlog.stdlib.add_log_level,
             structlog.stdlib.PositionalArgumentsFormatter(),
-            structlog.processors.TimeStamper(fmt="iso"),
+            kst_timestamper,  # Use KST timezone instead of UTC
             structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
             structlog.processors.UnicodeDecoder(),

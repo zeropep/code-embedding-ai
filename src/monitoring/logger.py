@@ -5,11 +5,18 @@ import sys
 import traceback
 from pathlib import Path
 from typing import Dict, Any, Optional, List
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import structlog
 from pythonjsonlogger import jsonlogger
 
 from .models import LogLevel, LogEntry, MonitoringConfig
+
+
+def kst_timestamper(logger, method_name, event_dict):
+    """Add KST timestamp to log entries"""
+    kst = timezone(timedelta(hours=9))
+    event_dict["timestamp"] = datetime.now(kst).isoformat()
+    return event_dict
 
 
 class StructuredLogger:
@@ -28,7 +35,7 @@ class StructuredLogger:
         """Configure structlog with proper processors and formatters"""
 
         processors = [
-            structlog.processors.TimeStamper(fmt="ISO"),
+            kst_timestamper,  # Use KST timezone instead of UTC
             structlog.processors.add_log_level,
             structlog.processors.StackInfoRenderer(),
             structlog.dev.set_exc_info,
@@ -104,8 +111,10 @@ class StructuredLogger:
         session_id = context.pop('session_id', None)
         error_details = context.pop('error_details', None)
 
+        # Use KST timezone
+        kst = timezone(timedelta(hours=9))
         entry = LogEntry(
-            timestamp=datetime.now().timestamp(),
+            timestamp=datetime.now(kst).timestamp(),
             level=level,
             component=self.component,
             message=message,
@@ -248,7 +257,8 @@ class StructuredLogger:
 
     def get_error_summary(self, hours: int = 24) -> Dict[str, Any]:
         """Get error summary for the specified time period"""
-        cutoff_time = datetime.now().timestamp() - (hours * 3600)
+        kst = timezone(timedelta(hours=9))
+        cutoff_time = datetime.now(kst).timestamp() - (hours * 3600)
 
         error_logs = [
             entry for entry in self.log_entries
@@ -272,7 +282,8 @@ class StructuredLogger:
         logs = self.log_entries
 
         if hours:
-            cutoff_time = datetime.now().timestamp() - (hours * 3600)
+            kst = timezone(timedelta(hours=9))
+            cutoff_time = datetime.now(kst).timestamp() - (hours * 3600)
             logs = [entry for entry in logs if entry.timestamp >= cutoff_time]
 
         if level_filter:

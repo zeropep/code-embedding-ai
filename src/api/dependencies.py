@@ -59,22 +59,8 @@ class ServiceManager:
                 auto_save=True
             )
 
-            # Initialize update service
-            repo_path = os.getenv("REPO_PATH", "./target_repo")
-            state_dir = os.getenv("UPDATE_STATE_DIR", "./update_state")
-
-            self.update_service = UpdateService(
-                repo_path=repo_path,
-                state_dir=state_dir,
-                parser_config=parser_config,
-                security_config=security_config,
-                embedding_config=embedding_config,
-                vector_config=vector_config,
-                update_config=update_config
-            )
-
-            # Start update service
-            await self.update_service.start()
+            # UpdateService is no longer needed - projects manage their own repositories
+            self.update_service = None
 
             logger.info("All services initialized successfully")
 
@@ -165,11 +151,10 @@ async def get_embedding_pipeline() -> EmbeddingPipeline:
     return service_manager.embedding_pipeline
 
 
-async def get_update_service() -> UpdateService:
-    """Get update service dependency"""
-    if not service_manager.update_service:
-        await service_manager.initialize_services()
-    return service_manager.update_service
+async def get_update_service() -> Optional[UpdateService]:
+    """Get update service dependency - deprecated, returns None"""
+    # UpdateService is deprecated - projects manage their own repositories
+    return None
 
 
 async def get_vector_store() -> VectorStore:
@@ -215,7 +200,6 @@ async def check_service_health() -> dict:
     """Check health of all services"""
     health_status = {
         "embedding_pipeline": False,
-        "update_service": False,
         "vector_store": False
     }
 
@@ -223,10 +207,6 @@ async def check_service_health() -> dict:
         if service_manager.embedding_pipeline:
             pipeline_health = await service_manager.embedding_pipeline.health_check()
             health_status["embedding_pipeline"] = pipeline_health.get("overall_status") == "healthy"
-
-        if service_manager.update_service:
-            update_health = await service_manager.update_service.health_check()
-            health_status["update_service"] = update_health.get("status") == "healthy"
 
         if service_manager.vector_store:
             vector_health = service_manager.vector_store.health_check()
