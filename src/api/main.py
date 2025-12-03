@@ -14,6 +14,9 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
+# Setup file logging
+from ..config.logging_config import setup_file_logging
+setup_file_logging()
 
 # Configure logging
 logger = structlog.get_logger(__name__)

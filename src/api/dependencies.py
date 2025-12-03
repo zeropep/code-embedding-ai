@@ -59,8 +59,32 @@ class ServiceManager:
                 auto_save=True
             )
 
-            # UpdateService is no longer needed - projects manage their own repositories
-            self.update_service = None
+            # Initialize UpdateService for automatic Git monitoring
+            repo_path = os.getenv("REPO_PATH", "./target_repo")
+            state_dir = os.getenv("UPDATE_STATE_DIR", "./update_state")
+
+            logger.info("Initializing UpdateService",
+                       repo_path=repo_path,
+                       state_dir=state_dir,
+                       check_interval=update_config.check_interval_seconds)
+
+            self.update_service = UpdateService(
+                repo_path=repo_path,
+                state_dir=state_dir,
+                parser_config=parser_config,
+                security_config=security_config,
+                embedding_config=embedding_config,
+                vector_config=vector_config,
+                update_config=update_config
+            )
+
+            # Start UpdateService
+            if await self.update_service.start():
+                logger.info("UpdateService started successfully")
+            else:
+                logger.warning("UpdateService failed to start - Git monitoring disabled")
+                # Don't fail initialization if UpdateService fails
+                # This allows the API to still work for manual processing
 
             logger.info("All services initialized successfully")
 
@@ -152,9 +176,10 @@ async def get_embedding_pipeline() -> EmbeddingPipeline:
 
 
 async def get_update_service() -> Optional[UpdateService]:
-    """Get update service dependency - deprecated, returns None"""
-    # UpdateService is deprecated - projects manage their own repositories
-    return None
+    """Get update service dependency"""
+    if not service_manager.update_service:
+        await service_manager.initialize_services()
+    return service_manager.update_service
 
 
 async def get_vector_store() -> VectorStore:
