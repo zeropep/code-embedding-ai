@@ -106,29 +106,25 @@ async def semantic_search(
 
         # Generate embedding for query
         await pipeline.embedding_service.start()
-        try:
-            # Create a dummy code chunk for embedding generation
-            from ..code_parser.models import CodeChunk, CodeLanguage, LayerType
+        # Create a dummy code chunk for embedding generation
+        from ..code_parser.models import CodeChunk, CodeLanguage, LayerType
 
-            query_chunk = CodeChunk(
-                content=request.query,
-                file_path="query",
-                language=CodeLanguage.JAVA,  # Default language
-                start_line=1,
-                end_line=1,
-                layer_type=LayerType.UNKNOWN,
-                metadata={}
-            )
+        query_chunk = CodeChunk(
+            content=request.query,
+            file_path="query",
+            language=CodeLanguage.JAVA,  # Default language
+            start_line=1,
+            end_line=1,
+            layer_type=LayerType.UNKNOWN,
+            metadata={}
+        )
 
-            embedded_chunks = await pipeline.embedding_service.generate_chunk_embeddings([query_chunk])
+        embedded_chunks = await pipeline.embedding_service.generate_chunk_embeddings([query_chunk])
 
-            if not embedded_chunks or 'embedding' not in embedded_chunks[0].metadata:
-                raise HTTPException(status_code=500, detail="Failed to generate query embedding")
+        if not embedded_chunks or 'embedding' not in embedded_chunks[0].metadata:
+            raise HTTPException(status_code=500, detail="Failed to generate query embedding")
 
-            query_vector = embedded_chunks[0].metadata['embedding']['vector']
-
-        finally:
-            await pipeline.embedding_service.stop()
+        query_vector = embedded_chunks[0].metadata['embedding']['vector']
 
         # Prepare filters with project_id if specified
         filters = request.filters or {}
@@ -242,38 +238,34 @@ async def find_similar_code(
     try:
         # Generate embedding for code snippet
         await pipeline.embedding_service.start()
-        try:
-            from ..code_parser.models import CodeChunk, CodeLanguage, LayerType
+        from ..code_parser.models import CodeChunk, CodeLanguage, LayerType
 
-            # Determine language
-            language_map = {
-                "java": CodeLanguage.JAVA,
-                "kotlin": CodeLanguage.KOTLIN,
-                "html": CodeLanguage.HTML,
-                "xml": CodeLanguage.XML
-            }
+        # Determine language
+        language_map = {
+            "java": CodeLanguage.JAVA,
+            "kotlin": CodeLanguage.KOTLIN,
+            "html": CodeLanguage.HTML,
+            "xml": CodeLanguage.XML
+        }
 
-            code_language = language_map.get(request.language, CodeLanguage.JAVA)
+        code_language = language_map.get(request.language, CodeLanguage.JAVA)
 
-            snippet_chunk = CodeChunk(
-                content=request.code_snippet,
-                file_path="snippet",
-                language=code_language,
-                start_line=1,
-                end_line=1,
-                layer_type=LayerType.UNKNOWN,
-                metadata={}
-            )
+        snippet_chunk = CodeChunk(
+            content=request.code_snippet,
+            file_path="snippet",
+            language=code_language,
+            start_line=1,
+            end_line=1,
+            layer_type=LayerType.UNKNOWN,
+            metadata={}
+        )
 
-            embedded_chunks = await pipeline.embedding_service.generate_chunk_embeddings([snippet_chunk])
+        embedded_chunks = await pipeline.embedding_service.generate_chunk_embeddings([snippet_chunk])
 
-            if not embedded_chunks or 'embedding' not in embedded_chunks[0].metadata:
-                raise HTTPException(status_code=500, detail="Failed to generate code embedding")
+        if not embedded_chunks or 'embedding' not in embedded_chunks[0].metadata:
+            raise HTTPException(status_code=500, detail="Failed to generate code embedding")
 
-            query_vector = embedded_chunks[0].metadata['embedding']['vector']
-
-        finally:
-            await pipeline.embedding_service.stop()
+        query_vector = embedded_chunks[0].metadata['embedding']['vector']
 
         # Prepare filters with project_id if specified
         filters = {}
