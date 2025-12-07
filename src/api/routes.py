@@ -20,6 +20,7 @@ from ..updates.models import UpdateRequest
 from ..database.vector_store import VectorStore
 from ..database.project_repository import ProjectRepository
 from ..database.project_models import Project, ProjectStatus
+from ..cache.cache_manager import get_cache_manager
 from datetime import datetime
 
 
@@ -99,6 +100,21 @@ async def semantic_search(
     """Perform semantic search using text query"""
     try:
         start_time = time.time()
+        cache_manager = get_cache_manager()
+
+        # Check cache first
+        cached_results = cache_manager.get_search_results(
+            query=request.query,
+            top_k=request.top_k,
+            project_id=request.project_id,
+            min_similarity=request.min_similarity
+        )
+
+        if cached_results is not None:
+            logger.info("Returning cached search results",
+                       query=request.query,
+                       cached=True)
+            return cached_results
 
         logger.info("Semantic search request",
                     query=request.query,
@@ -159,7 +175,7 @@ async def semantic_search(
 
         search_time = (time.time() - start_time) * 1000
 
-        return SearchResponse(
+        response = SearchResponse(
             status=RequestStatus.SUCCESS,
             message=f"Found {len(results)} results",
             results=results,
@@ -172,6 +188,17 @@ async def semantic_search(
             },
             search_time_ms=search_time
         )
+
+        # Cache the results
+        cache_manager.set_search_results(
+            results=response,
+            query=request.query,
+            top_k=request.top_k,
+            project_id=request.project_id,
+            min_similarity=request.min_similarity
+        )
+
+        return response
 
     except Exception as e:
         logger.error("Semantic search failed", error=str(e))
@@ -551,6 +578,24 @@ async def get_metrics(
         raise HTTPException(status_code=500, detail=f"Metrics retrieval failed: {str(e)}")
 
 
+@status_router.get("/cache", response_model=Dict[str, Any])
+async def get_cache_stats():
+    """Get cache statistics"""
+    try:
+        cache_manager = get_cache_manager()
+        stats = cache_manager.get_all_stats()
+
+        return {
+            "status": "success",
+            "cache_stats": stats,
+            "timestamp": time.time()
+        }
+
+    except Exception as e:
+        logger.error("Failed to get cache stats", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Cache stats retrieval failed: {str(e)}")
+
+
 # Admin Routes
 @admin_router.delete("/chunks", response_model=Dict[str, Any])
 async def delete_chunks(
@@ -685,6 +730,15 @@ async def get_project_statistics(
     """Get detailed statistics for a specific project"""
     try:
         start_time = time.time()
+        cache_manager = get_cache_manager()
+
+        # Check cache first
+        cached_stats = cache_manager.get_project_stats(project_id)
+        if cached_stats is not None:
+            logger.info("Returning cached project stats",
+                       project_id=project_id,
+                       cached=True)
+            return cached_stats
 
         logger.info("Retrieving project stats", project_id=project_id)
 
@@ -705,7 +759,7 @@ async def get_project_statistics(
         if 'error' in stats:
             logger.info("No chunks found for project, returning default stats",
                        project_id=project_id)
-            return ProjectStatsResponse(
+            response = ProjectStatsResponse(
                 status=RequestStatus.SUCCESS,
                 project_id=project.project_id,
                 project_name=project.name,
@@ -717,12 +771,15 @@ async def get_project_statistics(
                 layer_types={},
                 last_updated=project.updated_at.timestamp()
             )
+            # Cache the stats
+            cache_manager.set_project_stats(project_id, response)
+            return response
 
         logger.info("Project stats retrieved",
                     project_id=project_id,
                     total_chunks=stats.get('total_chunks', 0))
 
-        return ProjectStatsResponse(
+        response = ProjectStatsResponse(
             status=RequestStatus.SUCCESS,
             project_id=stats['project_id'],
             project_name=stats['project_name'],
@@ -734,6 +791,11 @@ async def get_project_statistics(
             layer_types=stats['layer_types'],
             last_updated=stats['last_updated']
         )
+
+        # Cache the stats
+        cache_manager.set_project_stats(project_id, response)
+
+        return response
 
     except HTTPException:
         raise
