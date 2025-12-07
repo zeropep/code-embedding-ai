@@ -371,3 +371,33 @@ def environment_variables(monkeypatch):
         monkeypatch.setenv(key, value)
 
     return test_vars
+
+
+def pytest_configure(config):
+    """Configure pytest with custom settings"""
+    config.addinivalue_line(
+        "markers", "e2e: End-to-end tests requiring running API server"
+    )
+    config.addinivalue_line(
+        "markers", "performance: Performance and benchmark tests"
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    """Modify test collection to skip E2E tests if API server is not running"""
+    import httpx
+
+    # Check if API server is running
+    api_running = False
+    try:
+        response = httpx.get("http://localhost:8000/health", timeout=2.0)
+        api_running = response.status_code == 200
+    except:
+        pass
+
+    # Skip E2E tests if API server is not running
+    skip_e2e = pytest.mark.skip(reason="API server not running (http://localhost:8000)")
+
+    for item in items:
+        if "e2e" in item.keywords and not api_running:
+            item.add_marker(skip_e2e)
