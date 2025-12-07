@@ -4,6 +4,7 @@ Tests semantic search, similar code search, and project-specific searches
 """
 
 import pytest
+import pytest_asyncio
 import httpx
 import asyncio
 from typing import Dict, Any, List
@@ -17,7 +18,7 @@ class TestE2ESemanticSearch:
         """Base URL for API"""
         return "http://localhost:8000"
 
-    @pytest.fixture
+    @pytest_asyncio.fixture
     async def http_client(self, api_base_url):
         """Create HTTP client for testing"""
         async with httpx.AsyncClient(base_url=api_base_url, timeout=30.0) as client:
@@ -159,7 +160,7 @@ class TestE2ESimilarCodeSearch:
         """Base URL for API"""
         return "http://localhost:8000"
 
-    @pytest.fixture
+    @pytest_asyncio.fixture
     async def http_client(self, api_base_url):
         """Create HTTP client for testing"""
         async with httpx.AsyncClient(base_url=api_base_url, timeout=30.0) as client:
@@ -256,7 +257,7 @@ class TestE2EProjectSearch:
         """Base URL for API"""
         return "http://localhost:8000"
 
-    @pytest.fixture
+    @pytest_asyncio.fixture
     async def http_client(self, api_base_url):
         """Create HTTP client for testing"""
         async with httpx.AsyncClient(base_url=api_base_url, timeout=30.0) as client:
@@ -374,7 +375,7 @@ class TestE2ESearchPerformance:
         """Base URL for API"""
         return "http://localhost:8000"
 
-    @pytest.fixture
+    @pytest_asyncio.fixture
     async def http_client(self, api_base_url):
         """Create HTTP client for testing"""
         async with httpx.AsyncClient(base_url=api_base_url, timeout=30.0) as client:
@@ -485,7 +486,7 @@ class TestE2ESearchAccuracy:
         """Base URL for API"""
         return "http://localhost:8000"
 
-    @pytest.fixture
+    @pytest_asyncio.fixture
     async def http_client(self, api_base_url):
         """Create HTTP client for testing"""
         async with httpx.AsyncClient(base_url=api_base_url, timeout=30.0) as client:

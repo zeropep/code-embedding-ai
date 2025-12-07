@@ -390,7 +390,8 @@ def pytest_collection_modifyitems(config, items):
     # Check if API server is running
     api_running = False
     try:
-        response = httpx.get("http://localhost:8000/health", timeout=2.0)
+        # Increased timeout to 60 seconds for slow model loading
+        response = httpx.get("http://localhost:8000/health", timeout=60.0)
         api_running = response.status_code == 200
     except:
         pass
