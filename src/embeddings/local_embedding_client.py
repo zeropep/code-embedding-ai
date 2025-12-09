@@ -5,6 +5,8 @@ from typing import List, Dict, Any, Optional, Tuple
 import structlog
 
 from .models import EmbeddingConfig, EmbeddingResult, EmbeddingStatus, EmbeddingTaskType
+from ..utils.retry import retry_async, RetryConfig, NETWORK_RETRY_CONFIG
+from ..utils.error_tracker import get_error_tracker, ErrorCategory, ErrorSeverity
 
 
 logger = structlog.get_logger(__name__)
@@ -34,9 +36,11 @@ class LocalEmbeddingClient:
         await self.close()
 
     async def _ensure_model_loaded(self):
-        """Ensure model is loaded"""
+        """Ensure model is loaded with retry logic"""
         if self._model_loaded and self.model is not None:
             return
+
+        error_tracker = get_error_tracker()
 
         try:
             # Import here to avoid loading if not needed
@@ -45,13 +49,36 @@ class LocalEmbeddingClient:
             logger.info("Loading local embedding model", model=self.config.model_name)
             start_time = time.time()
 
-            # Load model in thread pool to avoid blocking
-            loop = asyncio.get_event_loop()
-            self.model = await loop.run_in_executor(
-                None,
-                lambda: SentenceTransformer(
-                    self.config.model_name,
-                    trust_remote_code=True
+            # Define model loading function with retry
+            async def load_model():
+                loop = asyncio.get_event_loop()
+                return await loop.run_in_executor(
+                    None,
+                    lambda: SentenceTransformer(
+                        self.config.model_name,
+                        trust_remote_code=True
+                    )
+                )
+
+            # Retry configuration for model loading (fewer retries, longer delays)
+            model_retry_config = RetryConfig(
+                max_attempts=2,  # Only 1 retry for model loading
+                initial_delay=2.0,
+                max_delay=10.0,
+                exponential_base=2.0,
+                jitter=False,
+                retryable_exceptions=(ConnectionError, TimeoutError, OSError)
+            )
+
+            # Load model with retry
+            self.model = await retry_async(
+                load_model,
+                config=model_retry_config,
+                on_retry=lambda e, attempt, delay: logger.warning(
+                    "Retrying model load",
+                    attempt=attempt,
+                    delay=delay,
+                    error=str(e)
                 )
             )
 
@@ -65,14 +92,26 @@ class LocalEmbeddingClient:
                        model=self.config.model_name,
                        load_time=f"{load_time:.2f}s")
 
-        except ImportError:
+        except ImportError as e:
             logger.error("sentence-transformers not installed. Install with: pip install sentence-transformers")
+            error_tracker.record_error(
+                e,
+                category=ErrorCategory.EMBEDDING,
+                severity=ErrorSeverity.CRITICAL,
+                context={"model": self.config.model_name, "reason": "Missing dependency"}
+            )
             raise ImportError(
                 "sentence-transformers is required for local embeddings. "
                 "Install with: pip install sentence-transformers"
             )
         except Exception as e:
             logger.error("Failed to load local embedding model", error=str(e))
+            error_tracker.record_error(
+                e,
+                category=ErrorCategory.EMBEDDING,
+                severity=ErrorSeverity.CRITICAL,
+                context={"model": self.config.model_name, "operation": "model_load"}
+            )
             raise
 
     async def close(self):
@@ -162,6 +201,20 @@ class LocalEmbeddingClient:
             logger.error("Failed to generate embedding",
                          request_id=request_id,
                          error=str(e))
+
+            # Track the error
+            error_tracker = get_error_tracker()
+            error_tracker.record_error(
+                e,
+                category=ErrorCategory.EMBEDDING,
+                severity=ErrorSeverity.HIGH,
+                context={
+                    "request_id": request_id,
+                    "task_type": task_type.value,
+                    "content_length": len(content) if content else 0
+                }
+            )
+
             return EmbeddingResult(
                 request_id=request_id,
                 vector=None,
@@ -345,6 +398,20 @@ class LocalEmbeddingClient:
 
             except Exception as e:
                 logger.error("Batch embedding failed", error=str(e))
+
+                # Track the error
+                error_tracker = get_error_tracker()
+                error_tracker.record_error(
+                    e,
+                    category=ErrorCategory.EMBEDDING,
+                    severity=ErrorSeverity.HIGH,
+                    context={
+                        "operation": "batch_embedding",
+                        "batch_size": len(uncached_contents),
+                        "task_type": task_type.value
+                    }
+                )
+
                 # Return failed results for all uncached items
                 for idx, req_id in zip(uncached_indices, uncached_ids):
                     api_results.append((idx, EmbeddingResult(

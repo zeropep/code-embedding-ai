@@ -596,6 +596,115 @@ async def get_cache_stats():
         raise HTTPException(status_code=500, detail=f"Cache stats retrieval failed: {str(e)}")
 
 
+@status_router.get("/errors", response_model=Dict[str, Any])
+async def get_error_statistics(
+    category: Optional[str] = None,
+    severity: Optional[str] = None,
+    time_window_seconds: Optional[float] = None
+):
+    """
+    Get error statistics with optional filtering
+
+    Query Parameters:
+    - category: Filter by error category (network, database, embedding, etc.)
+    - severity: Filter by severity (low, medium, high, critical)
+    - time_window_seconds: Only include errors from last N seconds
+    """
+    try:
+        from ..utils.error_tracker import get_error_tracker, ErrorCategory, ErrorSeverity
+
+        error_tracker = get_error_tracker()
+
+        # Parse filters
+        category_filter = None
+        if category:
+            try:
+                category_filter = ErrorCategory(category.lower())
+            except ValueError:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid category. Valid values: {[c.value for c in ErrorCategory]}"
+                )
+
+        severity_filter = None
+        if severity:
+            try:
+                severity_filter = ErrorSeverity(severity.lower())
+            except ValueError:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid severity. Valid values: {[s.value for s in ErrorSeverity]}"
+                )
+
+        # Get statistics
+        stats = error_tracker.get_statistics(
+            category=category_filter,
+            severity=severity_filter,
+            time_window_seconds=time_window_seconds
+        )
+
+        return {
+            "status": "success",
+            "error_statistics": stats.to_dict(),
+            "timestamp": time.time(),
+            "filters": {
+                "category": category,
+                "severity": severity,
+                "time_window_seconds": time_window_seconds
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to get error statistics", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Error statistics retrieval failed: {str(e)}")
+
+
+@status_router.get("/errors/health", response_model=Dict[str, Any])
+async def get_error_health_status():
+    """
+    Get overall system health status based on error patterns
+
+    Returns health status (healthy, degraded, critical) along with error metrics
+    """
+    try:
+        from ..utils.error_tracker import get_error_tracker
+
+        error_tracker = get_error_tracker()
+        health = error_tracker.get_health_status()
+
+        return {
+            "status": "success",
+            "health": health,
+            "timestamp": time.time()
+        }
+
+    except Exception as e:
+        logger.error("Failed to get error health status", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Error health check failed: {str(e)}")
+
+
+@status_router.delete("/errors", response_model=Dict[str, Any])
+async def clear_error_statistics():
+    """Clear all error statistics (admin operation)"""
+    try:
+        from ..utils.error_tracker import get_error_tracker
+
+        error_tracker = get_error_tracker()
+        error_tracker.clear_errors()
+
+        return {
+            "status": "success",
+            "message": "Error statistics cleared",
+            "timestamp": time.time()
+        }
+
+    except Exception as e:
+        logger.error("Failed to clear error statistics", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Error clear failed: {str(e)}")
+
+
 # Admin Routes
 @admin_router.delete("/chunks", response_model=Dict[str, Any])
 async def delete_chunks(

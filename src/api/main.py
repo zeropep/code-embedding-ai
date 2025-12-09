@@ -1,6 +1,7 @@
 from .models import ErrorResponse
 from .dependencies import startup_event, shutdown_event
 from .routes import all_routers
+from .error_models import ErrorResponseBuilder, ErrorCode, get_http_status_for_error
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -10,6 +11,7 @@ import time
 import uuid
 import structlog
 from dotenv import load_dotenv
+from ..utils.error_tracker import get_error_tracker, ErrorCategory, ErrorSeverity
 
 # Load environment variables from .env file
 load_dotenv()
@@ -104,8 +106,22 @@ def create_app() -> FastAPI:
     # Global exception handler
     @application.exception_handler(Exception)
     async def global_exception_handler(request: Request, exc: Exception):
-        """Global exception handler"""
+        """Global exception handler with error tracking"""
         request_id = getattr(request.state, 'request_id', 'unknown')
+
+        # Track the error
+        error_tracker = get_error_tracker()
+        error_tracker.record_error(
+            exc,
+            category=ErrorCategory.INTERNAL,
+            severity=ErrorSeverity.CRITICAL,
+            context={
+                "request_id": request_id,
+                "method": request.method,
+                "url": str(request.url),
+                "client_ip": request.client.host if request.client else None
+            }
+        )
 
         logger.error("Unhandled exception",
                      request_id=request_id,
@@ -114,32 +130,75 @@ def create_app() -> FastAPI:
                      error=str(exc),
                      exc_info=True)
 
+        # Build error response
+        error_response = ErrorResponseBuilder.from_exception(
+            exc,
+            error_code=ErrorCode.INTERNAL_ERROR,
+            include_traceback=False  # Don't expose traceback to clients
+        )
+        error_response.request_id = request_id
+
         return JSONResponse(
-            status_code=500,
-            content=ErrorResponse(
-                message="Internal server error",
-                request_id=request_id,
-                error_details={"exception": str(exc)}
-            ).dict()
+            status_code=get_http_status_for_error(error_response.error_code),
+            content=error_response.model_dump(),
+            headers={"X-Request-ID": request_id}
         )
 
     # HTTP exception handler
     @application.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException):
-        """Handle HTTP exceptions"""
+        """Handle HTTP exceptions with error tracking"""
         request_id = getattr(request.state, 'request_id', 'unknown')
+
+        # Determine severity based on status code
+        if exc.status_code >= 500:
+            severity = ErrorSeverity.HIGH
+        elif exc.status_code >= 400:
+            severity = ErrorSeverity.MEDIUM
+        else:
+            severity = ErrorSeverity.LOW
+
+        # Track the error for 4xx and 5xx responses
+        if exc.status_code >= 400:
+            error_tracker = get_error_tracker()
+            error_tracker.record_error(
+                exc,
+                category=ErrorCategory.VALIDATION if exc.status_code < 500 else ErrorCategory.INTERNAL,
+                severity=severity,
+                context={
+                    "request_id": request_id,
+                    "status_code": exc.status_code,
+                    "method": request.method,
+                    "url": str(request.url)
+                }
+            )
 
         logger.warning("HTTP exception",
                        request_id=request_id,
                        status_code=exc.status_code,
                        detail=exc.detail)
 
+        # Map HTTP status codes to error codes
+        error_code = ErrorCode.INTERNAL_ERROR
+        if exc.status_code == 400:
+            error_code = ErrorCode.VALIDATION_ERROR
+        elif exc.status_code == 404:
+            error_code = ErrorCode.RESOURCE_NOT_FOUND
+        elif exc.status_code == 429:
+            error_code = ErrorCode.RATE_LIMIT_EXCEEDED
+        elif exc.status_code == 503:
+            error_code = ErrorCode.SERVICE_UNAVAILABLE
+
+        error_response = ErrorResponseBuilder.internal_error(
+            message=str(exc.detail) if exc.detail else "An error occurred"
+        )
+        error_response.error_code = error_code
+        error_response.request_id = request_id
+
         return JSONResponse(
             status_code=exc.status_code,
-            content=ErrorResponse(
-                message=exc.detail,
-                request_id=request_id
-            ).dict()
+            content=error_response.model_dump(),
+            headers={"X-Request-ID": request_id}
         )
 
     # Include all routers
