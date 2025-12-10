@@ -263,9 +263,12 @@ class UpdateService:
                 if change.change_type == ChangeType.DELETED:
                     files_to_delete.append(change.file_path)
                 elif change.change_type in [ChangeType.ADDED, ChangeType.MODIFIED, ChangeType.RENAMED]:
+                    # Modified files need to delete old chunks first
+                    if change.change_type in [ChangeType.MODIFIED, ChangeType.RENAMED]:
+                        files_to_delete.append(change.file_path)
                     files_to_process.append(change.file_path)
 
-            # Delete removed files from vector store
+            # Delete removed/modified files from vector store (to avoid duplicates)
             if files_to_delete:
                 await self._delete_files_from_store(files_to_delete, result)
 

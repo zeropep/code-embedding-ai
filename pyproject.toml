@@ -9,7 +9,7 @@ description = "AI Code Embedding Pipeline for Spring Boot codebases"
 authors = [
     {name = "AI Assistant", email = "ai@example.com"}
 ]
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 dependencies = [
     "fastapi>=0.104.1",
     "uvicorn>=0.23.1,<=0.23.1",
@@ -60,10 +60,10 @@ include = ["src*"]
 
 [tool.black]
 line-length = 88
-target-version = ['py38']
+target-version = ['py39']
 
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.9"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true

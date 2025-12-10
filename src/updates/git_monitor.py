@@ -134,24 +134,99 @@ class GitMonitor:
             return None
 
     def _get_changes_since_commit(self, since_commit: str) -> List[FileChange]:
-        """Get changes since a specific commit"""
+        """Get changes since a specific commit (checks final state of changed files)"""
         changes = []
+        changed_files = set()  # Track all files that changed
 
         try:
-            # Get diff between commits
+            # Get commit timestamp
             commit_obj = self.repo.commit(since_commit)
-            current_commit = self.repo.head.commit
+            commit_timestamp = commit_obj.committed_date
 
-            diff_index = commit_obj.diff(current_commit)
-
-            for diff_item in diff_index:
-                change = self._process_diff_item(diff_item)
-                if change and self._should_include_file(change.file_path):
-                    changes.append(change)
-
-            logger.debug("Changes detected since commit",
+            logger.debug("Finding changes since commit",
                          since_commit=since_commit[:8],
-                         changes_count=len(changes))
+                         commit_date=time.strftime('%Y-%m-%d %H:%M:%S',
+                                                   time.localtime(commit_timestamp)))
+
+            # Get all commits between since_commit and HEAD
+            commits = list(self.repo.iter_commits(f'{since_commit}..HEAD'))
+
+            logger.debug("Processing commits", commit_count=len(commits))
+
+            # Collect all files that changed in any commit
+            for commit in commits:
+                for parent in commit.parents:
+                    diff_index = parent.diff(commit)
+
+                    for diff_item in diff_index:
+                        file_path = diff_item.b_path or diff_item.a_path
+                        
+                        if self._should_include_file(file_path):
+                            changed_files.add(file_path)
+
+            logger.debug("Changed files collected", total_files=len(changed_files))
+
+            # Now check final state of each changed file
+            current_commit = self.repo.head.commit
+            
+            for file_path in changed_files:
+                try:
+                    # Check if file exists in HEAD
+                    file_exists_in_head = False
+                    file_hash = None
+                    
+                    try:
+                        blob = current_commit.tree[file_path]
+                        file_exists_in_head = True
+                        file_hash = blob.hexsha
+                    except (KeyError, AttributeError):
+                        file_exists_in_head = False
+                    
+                    # Check if file existed in since_commit
+                    file_existed_before = False
+                    try:
+                        commit_obj.tree[file_path]
+                        file_existed_before = True
+                    except (KeyError, AttributeError):
+                        file_existed_before = False
+                    
+                    # Determine change type based on final state
+                    if file_exists_in_head and not file_existed_before:
+                        # File was added
+                        change = FileChange(
+                            file_path=file_path,
+                            change_type=ChangeType.ADDED,
+                            file_hash=file_hash
+                        )
+                        changes.append(change)
+                    elif file_exists_in_head and file_existed_before:
+                        # File was modified
+                        change = FileChange(
+                            file_path=file_path,
+                            change_type=ChangeType.MODIFIED,
+                            file_hash=file_hash
+                        )
+                        changes.append(change)
+                    elif not file_exists_in_head and file_existed_before:
+                        # File was deleted
+                        change = FileChange(
+                            file_path=file_path,
+                            change_type=ChangeType.DELETED,
+                            file_hash=None
+                        )
+                        changes.append(change)
+                    
+                except Exception as e:
+                    logger.warning("Failed to process file", file_path=file_path, error=str(e))
+                    continue
+
+            logger.info("Changes detected since commit",
+                        since_commit=since_commit[:8],
+                        commits_processed=len(commits),
+                        files_changed=len(changes),
+                        added=len([c for c in changes if c.change_type == ChangeType.ADDED]),
+                        modified=len([c for c in changes if c.change_type == ChangeType.MODIFIED]),
+                        deleted=len([c for c in changes if c.change_type == ChangeType.DELETED]))
 
         except Exception as e:
             logger.error("Failed to get changes since commit",
