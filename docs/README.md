@@ -18,7 +18,7 @@ A comprehensive AI-powered code analysis pipeline that processes Spring Boot + T
 
 ### Prerequisites
 
-- Python 3.8+
+- Python 3.9+
 - Git repository with Java/Kotlin/HTML code
 - Jina AI API key
 
@@ -30,7 +30,7 @@ git clone <repository-url>
 cd code-embedding-ai
 
 # Install dependencies
-pip install -r requirements.txt
+uv sync
 
 # Set up environment variables
 export JINA_API_KEY="your-jina-api-key"
@@ -395,9 +395,12 @@ bandit -r src/
 ```dockerfile
 FROM python:3.9-slim
 
+# Install uv
+RUN pip install uv
+
 WORKDIR /app
 COPY requirements.txt .
-RUN pip install -r requirements.txt
+RUN uv sync
 
 COPY src/ src/
 COPY config.yaml .

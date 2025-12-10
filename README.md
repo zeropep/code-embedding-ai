@@ -24,7 +24,7 @@ git clone <repository-url>
 cd code-embedding-pipeline
 
 # Install dependencies
-pip install -r requirements.txt
+uv sync
 
 # Copy environment configuration
 cp .env.example .env
@@ -86,7 +86,7 @@ See [architecture.md](architecture.md) for detailed system design.
 
 ### Setup Development Environment
 ```bash
-pip install -e .[dev]
+uv sync
 ```
 
 ### Run Tests

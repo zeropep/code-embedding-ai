@@ -18,7 +18,7 @@ Spring Boot + Thymeleaf 코드베이스를 처리하고, 시맨틱 임베딩을 
 
 ### 사전 요구사항
 
-- Python 3.8+
+- Python 3.9+
 - Java/Kotlin/HTML 코드가 있는 Git 저장소
 - Jina AI API 키
 
@@ -30,7 +30,7 @@ git clone <repository-url>
 cd code-embedding-ai
 
 # 의존성 설치
-pip install -r requirements.txt
+uv sync
 
 # 환경 변수 설정
 export JINA_API_KEY="your-jina-api-key"
@@ -426,9 +426,12 @@ bandit -r src/
 ```dockerfile
 FROM python:3.9-slim
 
+# Install uv
+RUN pip install uv
+
 WORKDIR /app
 COPY requirements.txt .
-RUN pip install -r requirements.txt
+RUN uv sync
 
 COPY src/ src/
 COPY config.yaml .
