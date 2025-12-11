@@ -43,16 +43,16 @@ export CHROMADB_PERSIST_DIR="/path/to/vector/storage"
 
 ```bash
 # Process a repository
-python src/cli.py process /path/to/spring-boot-repo
+uv run python -m src.cli process /path/to/spring-boot-repo
 
 # Search for code
-python src/cli.py search "user authentication logic"
+uv run python -m src.cli search "user authentication logic"
 
 # Start monitoring for changes
-python src/cli.py monitor /path/to/repo
+uv run python -m src.cli monitor /path/to/repo
 
 # Start web server
-python src/cli.py server --port 8000
+uv run python -m src.cli server start --port 8000
 ```
 
 #### Python API

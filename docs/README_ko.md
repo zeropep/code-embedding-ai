@@ -43,16 +43,16 @@ export CHROMADB_PERSIST_DIR="/path/to/vector/storage"
 
 ```bash
 # 저장소 처리
-python src/cli.py process /path/to/spring-boot-repo
+uv run python -m src.cli process /path/to/spring-boot-repo
 
 # 코드 검색
-python src/cli.py search "사용자 인증 로직"
+uv run python -m src.cli search "사용자 인증 로직"
 
 # 변경 사항 모니터링 시작
-python src/cli.py monitor /path/to/repo
+uv run python -m src.cli monitor /path/to/repo
 
 # 웹 서버 시작
-python src/cli.py server --port 8000
+uv run python -m src.cli server start --port 8000
 ```
 
 #### Python API
@@ -450,28 +450,28 @@ CMD ["python", "-m", "uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port
 ### 1. 코드 리뷰 지원
 ```bash
 # 특정 기능과 관련된 코드 찾기
-python src/cli.py search "사용자 등록 프로세스"
+uv run python -m src.cli search "사용자 등록 프로세스"
 
 # 보안 취약점 검사
-python src/cli.py process --security-scan /path/to/repo
+uv run python -m src.cli process --security-scan /path/to/repo
 ```
 
 ### 2. 레거시 코드 이해
 ```bash
 # 비슷한 패턴의 코드 검색
-python src/cli.py search "데이터베이스 트랜잭션 처리"
+uv run python -m src.cli search "데이터베이스 트랜잭션 처리"
 
 # 특정 클래스의 사용법 찾기
-python src/cli.py search "UserService 메서드 호출"
+uv run python -m src.cli search "UserService 메서드 호출"
 ```
 
 ### 3. 아키텍처 분석
 ```bash
 # 레이어별 코드 검색
-python src/cli.py search "컨트롤러 레이어 인증" --layer controller
+uv run python -m src.cli search "컨트롤러 레이어 인증" --layer controller
 
 # 언어별 코드 분석
-python src/cli.py search "비즈니스 로직" --language java
+uv run python -m src.cli search "비즈니스 로직" --language java
 ```
 
 ## 문제 해결
@@ -499,11 +499,11 @@ df -h $CHROMADB_PERSIST_DIR
 #### 3. 파싱 오류
 ```bash
 # 지원되는 파일 형식 확인
-python src/cli.py --help
+uv run python -m src.cli --help
 
 # 로그 레벨 증가
 export LOG_LEVEL=DEBUG
-python src/cli.py process /path/to/repo
+uv run python -m src.cli process /path/to/repo
 ```
 
 ## 기여하기

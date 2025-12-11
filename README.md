@@ -56,22 +56,22 @@ CHUNK_MAX_TOKENS=500
 
 #### Process a repository
 ```bash
-python -m src.cli process repository /path/to/spring-boot-repo
+uv run python -m src.cli process repository /path/to/spring-boot-repo
 ```
 
 #### Update embeddings (incremental)
 ```bash
-python -m src.cli update apply /path/to/spring-boot-repo
+uv run python -m src.cli update apply /path/to/spring-boot-repo
 ```
 
 #### Search embeddings
 ```bash
-python -m src.cli search semantic "user authentication"
+uv run python -m src.cli search semantic "user authentication"
 ```
 
 #### Start API server
 ```bash
-python -m src.cli server start --port 8000
+uv run python -m src.cli server start --port 8000
 ```
 
 ## Architecture
