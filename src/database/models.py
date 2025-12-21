@@ -61,7 +61,7 @@ class ChunkMetadata:
     file_hash: Optional[str] = None
     last_updated: float = None
     embedding_model: str = "jina-code-embeddings-1.5b"
-    embedding_dimensions: int = 1024
+    embedding_dimensions: int = 1536
     project_id: str = "default"
     project_name: str = "default"
 
@@ -160,7 +160,7 @@ class DatabaseStats:
     total_files: int = 0
     collection_size_mb: float = 0.0
     last_updated: float = None
-    embedding_dimensions: int = 1024
+    embedding_dimensions: int = 1536
 
     # Language distribution
     language_counts: Dict[str, int] = None
