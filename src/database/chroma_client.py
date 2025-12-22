@@ -1,5 +1,6 @@
 import chromadb
 from chromadb.config import Settings
+import os
 import time
 from typing import List, Dict, Any, Optional
 import structlog
@@ -450,10 +451,11 @@ class ChromaDBClient:
 
                 # Test write capability with a dummy entry
                 test_id = f"health_check_{int(time.time())}"
+                embedding_dim = int(os.getenv("EMBEDDING_DIMENSIONS", "1536"))
                 try:
                     self.collection.add(
                         ids=[test_id],
-                        embeddings=[[0.0] * 1024],
+                        embeddings=[[0.0] * embedding_dim],
                         documents=["health check"],
                         metadatas=[{"test": True}]
                     )
