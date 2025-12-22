@@ -125,10 +125,25 @@ async def semantic_search(
         # Create a dummy code chunk for embedding generation
         from ..code_parser.models import CodeChunk, CodeLanguage, LayerType
 
+        # Determine query language from project if available
+        query_language = CodeLanguage.JAVA  # Default
+        if request.project_id:
+            project_repo = ProjectRepository()
+            project = project_repo.get(request.project_id)
+            if project and hasattr(project, 'primary_language') and project.primary_language:
+                language_map = {
+                    "java": CodeLanguage.JAVA,
+                    "python": CodeLanguage.PYTHON,
+                    "kotlin": CodeLanguage.KOTLIN,
+                    "html": CodeLanguage.HTML,
+                    "unknown": CodeLanguage.JAVA,  # unknown은 java로 fallback
+                }
+                query_language = language_map.get(project.primary_language, CodeLanguage.JAVA)
+
         query_chunk = CodeChunk(
             content=request.query,
             file_path="query",
-            language=CodeLanguage.JAVA,  # Default language
+            language=query_language,
             start_line=1,
             end_line=1,
             layer_type=LayerType.UNKNOWN,
@@ -267,15 +282,23 @@ async def find_similar_code(
         await pipeline.embedding_service.start()
         from ..code_parser.models import CodeChunk, CodeLanguage, LayerType
 
-        # Determine language
+        # Determine language from project or request
         language_map = {
             "java": CodeLanguage.JAVA,
+            "python": CodeLanguage.PYTHON,
             "kotlin": CodeLanguage.KOTLIN,
             "html": CodeLanguage.HTML,
             "xml": CodeLanguage.XML
         }
 
-        code_language = language_map.get(request.language, CodeLanguage.JAVA)
+        code_language = CodeLanguage.JAVA  # Default
+        if request.project_id:
+            project_repo = ProjectRepository()
+            project = project_repo.get(request.project_id)
+            if project and hasattr(project, 'primary_language') and project.primary_language:
+                code_language = language_map.get(project.primary_language, CodeLanguage.JAVA)
+        elif request.language:
+            code_language = language_map.get(request.language, CodeLanguage.JAVA)
 
         snippet_chunk = CodeChunk(
             content=request.code_snippet,

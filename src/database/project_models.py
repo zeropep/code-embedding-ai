@@ -24,6 +24,7 @@ class Project:
     description: Optional[str] = None
     git_remote_url: Optional[str] = None  # Remote Git repository URL
     git_branch: str = "main"              # Git branch to monitor
+    primary_language: str = "java"        # Primary programming language
     status: ProjectStatus = ProjectStatus.ACTIVE
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
@@ -42,6 +43,7 @@ class Project:
             "description": self.description,
             "git_remote_url": self.git_remote_url,
             "git_branch": self.git_branch,
+            "primary_language": self.primary_language,
             "status": self.status.value,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
@@ -60,6 +62,7 @@ class Project:
             description=data.get("description"),
             git_remote_url=data.get("git_remote_url"),
             git_branch=data.get("git_branch", "main"),
+            primary_language=data.get("primary_language", "java"),
             status=ProjectStatus(data.get("status", "active")),
             created_at=datetime.fromisoformat(data["created_at"]),
             updated_at=datetime.fromisoformat(data["updated_at"]),

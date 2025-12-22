@@ -11,6 +11,7 @@ class CodeLanguage(Enum):
     YAML = "yaml"
     PROPERTIES = "properties"
     PYTHON = "python"
+    UNKNOWN = "unknown"
 
 
 class LayerType(Enum):

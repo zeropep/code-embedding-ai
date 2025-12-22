@@ -49,6 +49,21 @@ class EmbeddingPipeline:
         logger.info("Starting repository processing", repo_path=repo_path, project_id=project_id, project_name=project_name)
 
         try:
+            # Detect primary language
+            from pathlib import Path
+            from ..code_parser.parser_factory import ParserFactory
+            from ..database.project_repository import ProjectRepository
+
+            parser_factory = ParserFactory(self.parser_config)
+            primary_language = parser_factory.detect_primary_language(Path(repo_path))
+            logger.info("Detected primary language", language=primary_language.value)
+
+            # Update project metadata with primary language if project_id exists
+            if project_id:
+                project_repo = ProjectRepository()
+                project_repo.update(project_id, {"primary_language": primary_language.value})
+                logger.info("Updated project primary language", project_id=project_id, language=primary_language.value)
+
             # Step 1: Parse repository
             logger.info("Step 1: Parsing repository")
             parsed_files = await self.code_parser.parse_repository_async(repo_path)

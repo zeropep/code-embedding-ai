@@ -82,8 +82,8 @@ class ParserFactory:
         elif suffix in ['.properties']:
             return SimpleParser(self.config, CodeLanguage.PROPERTIES)
         else:
-            # Default to Java for unknown files
-            return SimpleParser(self.config, CodeLanguage.JAVA)
+            # Default to UNKNOWN for unknown files
+            return SimpleParser(self.config, CodeLanguage.UNKNOWN)
 
     def can_parse_file(self, file_path: Path) -> bool:
         """Check if we can parse the given file"""
@@ -203,3 +203,27 @@ class ParserFactory:
             'kotlin': any(directory_path.glob('**/*.kt')),
             'web': any(directory_path.glob('**/*.html')) or any(directory_path.glob('**/package.json')),
         }
+
+    def detect_primary_language(self, directory_path: Path) -> CodeLanguage:
+        """Detect primary language based on file extension statistics"""
+        extension_counts = {}
+        ext_to_lang = {
+            '.java': CodeLanguage.JAVA,
+            '.py': CodeLanguage.PYTHON,
+            '.pyw': CodeLanguage.PYTHON,
+            '.kt': CodeLanguage.KOTLIN,
+            '.kts': CodeLanguage.KOTLIN,
+            '.html': CodeLanguage.HTML,
+            '.htm': CodeLanguage.HTML,
+        }
+
+        for ext in ext_to_lang.keys():
+            count = len(list(directory_path.glob(f"**/*{ext}")))
+            if count > 0:
+                lang = ext_to_lang[ext]
+                extension_counts[lang] = extension_counts.get(lang, 0) + count
+
+        if not extension_counts:
+            return CodeLanguage.JAVA
+
+        return max(extension_counts, key=extension_counts.get)

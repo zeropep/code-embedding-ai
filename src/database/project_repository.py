@@ -35,6 +35,7 @@ class ProjectRepository:
                     description TEXT,
                     git_remote_url TEXT,
                     git_branch TEXT DEFAULT 'main',
+                    primary_language TEXT DEFAULT 'java',
                     status TEXT NOT NULL DEFAULT 'active',
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
@@ -66,9 +67,9 @@ class ProjectRepository:
 
             cursor.execute("""
                 INSERT INTO projects (
-                    project_id, name, repository_path, description, git_remote_url, git_branch, status,
+                    project_id, name, repository_path, description, git_remote_url, git_branch, primary_language, status,
                     created_at, updated_at, total_chunks, total_files, last_indexed_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 project.project_id,
                 project.name,
@@ -76,6 +77,7 @@ class ProjectRepository:
                 project.description,
                 project.git_remote_url,
                 project.git_branch,
+                project.primary_language,
                 project.status.value,
                 project.created_at.isoformat(),
                 project.updated_at.isoformat(),
@@ -165,6 +167,8 @@ class ProjectRepository:
                 project.git_remote_url = updates["git_remote_url"]
             if "git_branch" in updates:
                 project.git_branch = updates["git_branch"]
+            if "primary_language" in updates:
+                project.primary_language = updates["primary_language"]
             if "status" in updates:
                 project.status = ProjectStatus(updates["status"])
             if "total_chunks" in updates:
@@ -187,6 +191,7 @@ class ProjectRepository:
                     description = ?,
                     git_remote_url = ?,
                     git_branch = ?,
+                    primary_language = ?,
                     status = ?,
                     updated_at = ?,
                     total_chunks = ?,
@@ -199,6 +204,7 @@ class ProjectRepository:
                 project.description,
                 project.git_remote_url,
                 project.git_branch,
+                project.primary_language,
                 project.status.value,
                 project.updated_at.isoformat(),
                 project.total_chunks,
@@ -274,6 +280,7 @@ class ProjectRepository:
             description=row["description"],
             git_remote_url=row["git_remote_url"] if "git_remote_url" in row.keys() else None,
             git_branch=row["git_branch"] if "git_branch" in row.keys() else "main",
+            primary_language=row["primary_language"] if "primary_language" in row.keys() else "java",
             status=ProjectStatus(row["status"]),
             created_at=datetime.fromisoformat(row["created_at"]),
             updated_at=datetime.fromisoformat(row["updated_at"]),
