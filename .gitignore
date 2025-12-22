@@ -311,3 +311,4 @@ project_plan.md
 # etc
 /todos
 /.claude
+*.bat
