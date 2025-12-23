@@ -43,7 +43,7 @@ class SearchRequest(BaseModel):
     query: str = Field(..., description="Search query text")
     search_type: SearchType = Field(default=SearchType.SEMANTIC, description="Type of search to perform")
     top_k: int = Field(default=10, ge=1, le=100, description="Number of results to return")
-    min_similarity: float = Field(default=0.0, ge=0.0, le=1.0, description="Minimum similarity score")
+    min_similarity: float = Field(default=0.4, ge=0.0, le=1.0, description="Minimum similarity score")
     filters: Optional[Dict[str, Any]] = Field(default=None, description="Metadata filters")
     project_id: Optional[str] = Field(default=None, description="Filter by specific project ID")
     include_content: bool = Field(default=True, description="Include code content in results")
