@@ -45,8 +45,27 @@ class LocalEmbeddingClient:
         try:
             # Import here to avoid loading if not needed
             from sentence_transformers import SentenceTransformer
+            import torch
 
-            logger.info("Loading local embedding model", model=self.config.model_name)
+            # Get device to use
+            device = self.config.get_device()
+
+            # Log GPU status
+            cuda_available = torch.cuda.is_available()
+            if cuda_available:
+                device_count = torch.cuda.device_count()
+                logger.info("GPU detected",
+                           cuda_available=True,
+                           device_count=device_count,
+                           selected_device=device)
+            else:
+                logger.info("GPU not available, using CPU",
+                           cuda_available=False,
+                           selected_device=device)
+
+            logger.info("Loading local embedding model",
+                       model=self.config.model_name,
+                       device=device)
             start_time = time.time()
 
             # Define model loading function with retry
@@ -56,6 +75,7 @@ class LocalEmbeddingClient:
                     None,
                     lambda: SentenceTransformer(
                         self.config.model_name,
+                        device=device,
                         trust_remote_code=True
                     )
                 )
@@ -71,16 +91,34 @@ class LocalEmbeddingClient:
             )
 
             # Load model with retry
-            self.model = await retry_async(
-                load_model,
-                config=model_retry_config,
-                on_retry=lambda e, attempt, delay: logger.warning(
-                    "Retrying model load",
-                    attempt=attempt,
-                    delay=delay,
-                    error=str(e)
+            try:
+                self.model = await retry_async(
+                    load_model,
+                    config=model_retry_config,
+                    on_retry=lambda e, attempt, delay: logger.warning(
+                        "Retrying model load",
+                        attempt=attempt,
+                        delay=delay,
+                        error=str(e)
+                    )
                 )
-            )
+            except (RuntimeError, Exception) as e:
+                # CUDA initialization failed, fallback to CPU
+                if "CUDA" in str(e) or "cuda" in str(e):
+                    logger.warning("CUDA initialization failed, falling back to CPU",
+                                  error=str(e))
+                    device = "cpu"
+                    loop = asyncio.get_event_loop()
+                    self.model = await loop.run_in_executor(
+                        None,
+                        lambda: SentenceTransformer(
+                            self.config.model_name,
+                            device="cpu",
+                            trust_remote_code=True
+                        )
+                    )
+                else:
+                    raise
 
             # Set max sequence length (Jina supports up to 8192)
             if hasattr(self.model, 'max_seq_length'):
@@ -90,6 +128,7 @@ class LocalEmbeddingClient:
             load_time = time.time() - start_time
             logger.info("Local model loaded successfully",
                        model=self.config.model_name,
+                       device=device,
                        load_time=f"{load_time:.2f}s")
 
         except ImportError as e:

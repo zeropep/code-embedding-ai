@@ -103,6 +103,7 @@ class EmbeddingConfig:
     enable_caching: bool = True
     cache_ttl: int = 3600  # Cache TTL in seconds
     use_local_model: bool = True  # Use local model by default
+    device: str = "auto"  # Device for local model: auto, cpu, cuda, cuda:0, cuda:1
 
     def __post_init__(self):
         """Load values from environment variables if not explicitly set"""
@@ -112,6 +113,11 @@ class EmbeddingConfig:
         # Load use_local_model from env (default: true)
         use_local_env = os.getenv("USE_LOCAL_EMBEDDING_MODEL", "true")
         self.use_local_model = use_local_env.lower() == "true"
+
+        # Load device from environment
+        device_env = os.getenv("EMBEDDING_DEVICE", "auto")
+        if device_env:
+            self.device = device_env
 
         # Only load from env if api_key is empty (default value)
         if not self.api_key:
@@ -136,6 +142,20 @@ class EmbeddingConfig:
             self.timeout = int(os.getenv("EMBEDDING_TIMEOUT", str(self.timeout)))
         cache_env = os.getenv("ENABLE_EMBEDDING_CACHE", "true")
         self.enable_caching = cache_env.lower() == "true"
+
+    def get_device(self) -> str:
+        """Get the actual device to use for local model
+
+        Returns:
+            Device string suitable for SentenceTransformer: "cpu", "cuda", "cuda:0", etc.
+        """
+        if self.device == "auto":
+            try:
+                import torch
+                return "cuda" if torch.cuda.is_available() else "cpu"
+            except ImportError:
+                return "cpu"
+        return self.device
 
     def validate(self) -> Optional[str]:
         """Validate configuration. Returns None if valid, error message if invalid."""
