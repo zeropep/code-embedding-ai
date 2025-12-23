@@ -36,6 +36,9 @@ def setup_file_logging(log_dir: str = None, log_file: str = None, log_level: str
     # Get log level from environment or use default
     log_level = os.getenv("LOG_LEVEL", log_level).upper()
 
+    # Get log retention days from environment
+    log_retention_days = int(os.getenv("LOG_RETENTION_DAYS", "30"))
+
     # Create log directory if it doesn't exist
     log_path = Path(log_dir)
     log_path.mkdir(parents=True, exist_ok=True)
@@ -53,13 +56,15 @@ def setup_file_logging(log_dir: str = None, log_file: str = None, log_level: str
     }
     numeric_level = level_map.get(log_level, logging.INFO)
 
-    # Setup file handler with rotation
-    file_handler = logging.handlers.RotatingFileHandler(
+    # Setup file handler with daily rotation
+    file_handler = logging.handlers.TimedRotatingFileHandler(
         filename=str(log_file_path),
-        maxBytes=10 * 1024 * 1024,  # 10MB
-        backupCount=7,  # Keep 7 backup files
+        when='midnight',
+        interval=1,
+        backupCount=log_retention_days,
         encoding='utf-8'
     )
+    file_handler.suffix = "%Y-%m-%d"
     file_handler.setLevel(numeric_level)
 
     # Setup console handler

@@ -208,7 +208,7 @@ class MonitoringConfig:
     log_level: LogLevel = LogLevel.INFO
     log_file_path: Optional[str] = "logs/pipeline.log"
     log_rotation_size_mb: int = 10
-    log_retention_days: int = 7
+    log_retention_days: int = 30
     enable_structured_logging: bool = True
     enable_console_logging: bool = True
 

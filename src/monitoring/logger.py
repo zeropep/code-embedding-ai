@@ -64,12 +64,15 @@ class StructuredLogger:
             log_file = Path(self.config.log_file_path)
             log_file.parent.mkdir(parents=True, exist_ok=True)
 
-            # Rotating file handler
-            file_handler = logging.handlers.RotatingFileHandler(
+            # Timed rotating file handler (daily rotation)
+            file_handler = logging.handlers.TimedRotatingFileHandler(
                 filename=self.config.log_file_path,
-                maxBytes=self.config.log_rotation_size_mb * 1024 * 1024,
-                backupCount=self.config.log_retention_days
+                when='midnight',
+                interval=1,
+                backupCount=self.config.log_retention_days,
+                encoding='utf-8'
             )
+            file_handler.suffix = "%Y-%m-%d"
 
             if self.config.enable_structured_logging:
                 formatter = jsonlogger.JsonFormatter(
