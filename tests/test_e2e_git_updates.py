@@ -367,15 +367,26 @@ class TestE2EGitUpdateErrorHandling:
 
     @pytest.mark.asyncio
     @pytest.mark.e2e
-    async def test_git_command_timeout(self, temp_git_repo):
+    async def test_git_command_timeout(self, tmp_path):
         """
         E2E Test: Git commands should have reasonable timeouts
         """
+        import subprocess
         from src.updates.git_monitor import GitMonitor
         from src.updates.models import UpdateConfig
 
+        # Create temp git repo inline
+        repo_path = tmp_path / "test_repo"
+        repo_path.mkdir()
+        subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=repo_path, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_path, check=True, capture_output=True)
+        (repo_path / "test.py").write_text("def hello(): pass")
+        subprocess.run(["git", "add", "."], cwd=repo_path, check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "Initial"], cwd=repo_path, check=True, capture_output=True)
+
         config = UpdateConfig()
-        monitor = GitMonitor(str(temp_git_repo), config)
+        monitor = GitMonitor(str(repo_path), config)
 
         assert monitor.connect()
 

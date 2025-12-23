@@ -57,7 +57,7 @@ class TestAPIModels:
         request = SearchRequest(query="test query")
 
         assert request.top_k == 10
-        assert request.min_similarity == 0.0
+        assert request.min_similarity == 0.4
         assert request.search_type == SearchType.SEMANTIC
         assert request.include_content is True
         assert request.include_embeddings is False
@@ -277,13 +277,12 @@ class TestProcessEndpoints:
         data = response.json()
         assert data["status"] == "success"
 
-    def test_trigger_update_endpoint(self, client):
-        """Test trigger update endpoint"""
+    def test_trigger_update_endpoint_deprecated(self, client):
+        """Test trigger update endpoint is deprecated"""
         response = client.post("/process/update", params={"force_full": False})
 
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "success"
+        # This endpoint is deprecated and returns 410 Gone
+        assert response.status_code == 410
 
 
 class TestStatusEndpoints:
