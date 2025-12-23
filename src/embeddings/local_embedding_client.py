@@ -157,9 +157,21 @@ class LocalEmbeddingClient:
         """Close the client (cleanup if needed)"""
         # Sentence transformers doesn't need explicit cleanup
         # but we can clear the cache
+        logger.debug("Context manager exit (model still loaded)")
+        # Keep model loaded for reuse
+
+    async def shutdown(self):
+        """Fully shutdown the client and release resources"""
         if self._model_loaded:
-            logger.info("Closing local embedding client")
+            logger.info("Shutting down local embedding client")
             self._model_loaded = False
+            self.model = None
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except ImportError:
+                pass
 
     async def generate_embedding(self, content: str, request_id: str = "",
                                  task_type: EmbeddingTaskType = EmbeddingTaskType.CODE2CODE) -> EmbeddingResult:

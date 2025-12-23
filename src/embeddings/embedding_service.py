@@ -69,7 +69,7 @@ class EmbeddingService:
             except asyncio.CancelledError:
                 pass
 
-        await self.client.close()
+        await self.client.shutdown()
         logger.info("EmbeddingService stopped")
 
     async def generate_chunk_embeddings(self, chunks: List[CodeChunk]) -> List[CodeChunk]:
@@ -139,8 +139,9 @@ class EmbeddingService:
         request_ids = [req.id for req in requests]
 
         try:
-            async with self.client as client:
-                results = await client.generate_embeddings_batch(contents, request_ids, task_type)
+            # Ensure model is loaded, then call directly (no context manager)
+            await self.client._ensure_model_loaded()
+            results = await self.client.generate_embeddings_batch(contents, request_ids, task_type)
 
             # Update metrics
             for result in results:
@@ -278,9 +279,9 @@ class EmbeddingService:
         try:
             # Test API with small request
             test_content = "public class Test { }"
-            async with self.client as client:
-                result = await client.generate_embedding(test_content, "health_check")
-                health["api_accessible"] = result.status == EmbeddingStatus.COMPLETED
+            await self.client._ensure_model_loaded()
+            result = await self.client.generate_embedding(test_content, "health_check")
+            health["api_accessible"] = result.status == EmbeddingStatus.COMPLETED
 
         except Exception as e:
             health["status"] = "unhealthy"

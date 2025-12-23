@@ -7,6 +7,7 @@ import structlog
 
 from .models import (VectorDBConfig, ChunkMetadata, StoredChunk, VectorSearchResult,
                      VectorSearchQuery, DatabaseStats, BulkOperationResult, VectorDBStatus)
+from ..utils.format_utils import format_duration
 
 
 logger = structlog.get_logger(__name__)
@@ -157,7 +158,7 @@ class ChromaDBClient:
                     total=len(chunks),
                     successful=successful,
                     failed=failed,
-                    processing_time=processing_time)
+                    processing_time=format_duration(processing_time))
 
         return result
 
