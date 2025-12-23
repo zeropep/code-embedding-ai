@@ -56,7 +56,8 @@ class ServiceManager:
                 security_config=security_config,
                 embedding_config=embedding_config,
                 vector_config=vector_config,
-                auto_save=True
+                auto_save=True,
+                chunk_batch_size=int(os.getenv("CHROMADB_BATCH_SIZE", "100"))
             )
 
             # Initialize UpdateService for automatic Git monitoring

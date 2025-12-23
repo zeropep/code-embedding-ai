@@ -1,5 +1,6 @@
 import asyncio
 from typing import List, Dict, Any, Optional
+import os
 import structlog
 
 from .embedding_service import EmbeddingService
@@ -24,7 +25,7 @@ class EmbeddingPipeline:
                  embedding_config: EmbeddingConfig = None,
                  vector_config: VectorDBConfig = None,
                  auto_save: bool = True,
-                 chunk_batch_size: int = 100):
+                 chunk_batch_size: int = None):
 
         # Initialize configurations
         self.parser_config = parser_config or ParserConfig()
@@ -32,7 +33,7 @@ class EmbeddingPipeline:
         self.embedding_config = embedding_config or EmbeddingConfig()
         self.vector_config = vector_config or VectorDBConfig()
         self.auto_save = auto_save
-        self.chunk_batch_size = chunk_batch_size  # Process this many chunks at a time
+        self.chunk_batch_size = chunk_batch_size or int(os.getenv("CHROMADB_BATCH_SIZE", "100"))  # Process this many chunks at a time
 
         # Initialize components
         self.code_parser = CodeParser(self.parser_config)
