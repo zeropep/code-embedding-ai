@@ -19,7 +19,7 @@ def cli(config: str, verbose: bool):
 
 @cli.command()
 @click.option("--repo-path", required=True, help="Path to source code repository")
-@click.option("--output-db", default="./embeddings.db", help="Output ChromaDB path")
+@click.option("--output-db", default="./chroma_db", help="Output ChromaDB path")
 def process(repo_path: str, output_db: str):
     click.echo(f"Processing repository: {repo_path}")
     click.echo(f"Output database: {output_db}")
@@ -27,14 +27,14 @@ def process(repo_path: str, output_db: str):
 
 @cli.command()
 @click.option("--repo-path", required=True, help="Path to source code repository")
-@click.option("--output-db", default="./embeddings.db", help="ChromaDB path")
+@click.option("--output-db", default="./chroma_db", help="ChromaDB path")
 def update(repo_path: str, output_db: str):
     click.echo(f"Updating embeddings for: {repo_path}")
 
 
 @cli.command()
 @click.option("--query", required=True, help="Search query")
-@click.option("--db-path", default="./embeddings.db", help="ChromaDB path")
+@click.option("--db-path", default="./chroma_db", help="ChromaDB path")
 @click.option("--limit", default=10, help="Number of results")
 def search(query: str, db_path: str, limit: int):
     click.echo(f"Searching for: {query}")

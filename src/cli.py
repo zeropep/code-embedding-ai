@@ -56,7 +56,7 @@ def process():
 
 @process.command("repository")
 @click.argument("repo_path", type=click.Path(exists=True, file_okay=False, dir_okay=True))
-@click.option("--output-db", default="./embeddings.db", help="Output ChromaDB path")
+@click.option("--output-db", default="./chroma_db", help="Output ChromaDB path")
 @click.option("--force", is_flag=True, help="Force reprocessing of all files")
 @click.option("--include", multiple=True, help="File patterns to include")
 @click.option("--exclude", multiple=True, help="File patterns to exclude")
@@ -123,7 +123,7 @@ def process_repository(ctx, repo_path, output_db, force, include, exclude, no_se
 
 @process.command("files")
 @click.argument("files", nargs=-1, required=True, type=click.Path(exists=True, file_okay=True))
-@click.option("--output-db", default="./embeddings.db", help="Output ChromaDB path")
+@click.option("--output-db", default="./chroma_db", help="Output ChromaDB path")
 @click.option("--project-id", default=None, help="Project ID for multi-project support")
 @click.option("--project-name", default=None, help="Project name for multi-project support")
 @click.pass_context
@@ -161,7 +161,7 @@ def search():
 
 @search.command("semantic")
 @click.argument("query")
-@click.option("--db-path", default="./embeddings.db", help="ChromaDB path")
+@click.option("--db-path", default="./chroma_db", help="ChromaDB path")
 @click.option("--limit", default=10, help="Number of results")
 @click.option("--min-similarity", default=0.0, help="Minimum similarity score")
 @click.option("--show-content", is_flag=True, help="Show code content")
@@ -203,7 +203,7 @@ def semantic_search(query, db_path, limit, min_similarity, show_content, output_
 @click.option("--class-name", help="Filter by class name")
 @click.option("--layer-type", help="Filter by layer type (Controller, Service, etc.)")
 @click.option("--language", help="Filter by language")
-@click.option("--db-path", default="./embeddings.db", help="ChromaDB path")
+@click.option("--db-path", default="./chroma_db", help="ChromaDB path")
 @click.option("--limit", default=10, help="Number of results")
 @click.option("--format", "output_format", type=click.Choice(["table", "json", "simple"]),
               default="table", help="Output format")
@@ -403,7 +403,7 @@ def db():
 
 
 @db.command("stats")
-@click.option("--db-path", default="./embeddings.db", help="ChromaDB path")
+@click.option("--db-path", default="./chroma_db", help="ChromaDB path")
 def show_stats(db_path):
     """Show database statistics"""
     try:
@@ -437,7 +437,7 @@ def show_stats(db_path):
 
 
 @db.command("reset")
-@click.option("--db-path", default="./embeddings.db", help="ChromaDB path")
+@click.option("--db-path", default="./chroma_db", help="ChromaDB path")
 @click.confirmation_option(prompt="[WARNING] This will delete all data. Continue?")
 def reset_database(db_path):
     """Reset the vector database (delete all data)"""

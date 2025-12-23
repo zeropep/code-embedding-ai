@@ -16,7 +16,7 @@ logger = structlog.get_logger(__name__)
 class ProjectRepository:
     """Repository for managing project metadata in SQLite"""
 
-    def __init__(self, db_path: str = "./projects.db"):
+    def __init__(self, db_path: str = "./chroma_db/projects.db"):
         self.db_path = db_path
         self._ensure_database()
 
