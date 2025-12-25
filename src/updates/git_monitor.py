@@ -16,13 +16,45 @@ logger = structlog.get_logger(__name__)
 class GitMonitor:
     """Monitor Git repository for changes"""
 
-    def __init__(self, repo_path: str, config: UpdateConfig = None):
+    def __init__(self, repo_path: str, config: UpdateConfig = None, branch: str = "main"):
         self.repo_path = Path(repo_path)
         self.config = config or UpdateConfig()
+        self.branch = branch  # 프로젝트에서 전달받은 브랜치
         self.repo: Optional[git.Repo] = None
         self.last_known_state: Optional[RepositoryState] = None
 
-        logger.info("GitMonitor initialized", repo_path=str(self.repo_path))
+        logger.info("GitMonitor initialized", repo_path=str(self.repo_path), branch=self.branch)
+
+    def _resolve_branch(self) -> str:
+        """Resolve branch name with main/master compatibility"""
+        if not self.repo:
+            return self.branch
+
+        # 지정된 브랜치가 존재하는지 확인
+        try:
+            self.repo.refs[self.branch]
+            return self.branch
+        except (IndexError, KeyError):
+            pass
+
+        # main/master 호환성 처리
+        if self.branch == "main":
+            try:
+                self.repo.refs["master"]
+                logger.info("Branch 'main' not found, using 'master'")
+                return "master"
+            except (IndexError, KeyError):
+                pass
+        elif self.branch == "master":
+            try:
+                self.repo.refs["main"]
+                logger.info("Branch 'master' not found, using 'main'")
+                return "main"
+            except (IndexError, KeyError):
+                pass
+
+        # 둘 다 없으면 원래 브랜치 반환
+        return self.branch
 
     def connect(self) -> bool:
         """Connect to Git repository"""
@@ -38,9 +70,19 @@ class GitMonitor:
                 logger.error("Bare repositories are not supported")
                 return False
 
+            # 안전하게 브랜치 및 커밋 정보 가져오기
+            resolved_branch = self._resolve_branch()
+            commit_sha = "unknown"
+            try:
+                if self.repo.head.is_valid():
+                    commit_sha = self.repo.head.commit.hexsha[:8]
+            except (ValueError, TypeError):
+                # 빈 저장소이거나 Detached HEAD 상태
+                logger.warning("Cannot read commit SHA (empty repo or detached HEAD)")
+
             logger.info("Connected to Git repository",
-                        branch=self.repo.active_branch.name,
-                        commit=self.repo.head.commit.hexsha[:8])
+                        branch=resolved_branch,
+                        commit=commit_sha)
             return True
 
         except git.InvalidGitRepositoryError:
@@ -56,12 +98,23 @@ class GitMonitor:
             return None
 
         try:
-            current_commit = self.repo.head.commit.hexsha
-            current_branch = self.repo.active_branch.name
+            # 안전하게 커밋 SHA 가져오기
+            try:
+                current_commit = self.repo.head.commit.hexsha
+            except (ValueError, TypeError):
+                # 빈 저장소 - 커밋이 없음
+                logger.warning("No commits in repository, cannot get state")
+                return None
+
+            current_branch = self._resolve_branch()
             timestamp = time.time()
 
             # Get file hashes for tracked files
-            file_hashes = self._get_file_hashes()
+            try:
+                file_hashes = self._get_file_hashes()
+            except OSError as e:
+                logger.error("Failed to get file hashes (OS error)", error=str(e))
+                file_hashes = {}
 
             state = RepositoryState(
                 commit_hash=current_commit,
@@ -77,6 +130,9 @@ class GitMonitor:
 
             return state
 
+        except OSError as e:
+            logger.error("Failed to get repository state (OS error)", error=str(e))
+            return None
         except Exception as e:
             logger.error("Failed to get repository state", error=str(e))
             return None
@@ -150,6 +206,16 @@ class GitMonitor:
 
             # Get all commits between since_commit and HEAD
             commits = list(self.repo.iter_commits(f'{since_commit}..HEAD'))
+
+            if len(commits) == 0:
+                logger.info("No new commits since last check",
+                            last_commit=since_commit[:8],
+                            current_commit=self.repo.head.commit.hexsha[:8])
+            else:
+                logger.info("New commits detected",
+                            new_commits=len(commits),
+                            last_commit=since_commit[:8],
+                            current_commit=self.repo.head.commit.hexsha[:8])
 
             logger.debug("Processing commits", commit_count=len(commits))
 
@@ -350,12 +416,26 @@ class GitMonitor:
         file_hashes = {}
 
         try:
+            # HEAD commit이 있는지 먼저 확인
+            head_commit = None
+            try:
+                head_commit = self.repo.head.commit
+            except (ValueError, TypeError):
+                # 빈 저장소 - 커밋이 없음
+                pass
+
             # Get all tracked files from the index
             for file_path in self.repo.git.ls_files().splitlines():
                 try:
-                    # Get blob hash for the file
-                    blob = self.repo.head.commit.tree[file_path]
-                    file_hashes[file_path] = blob.hexsha
+                    if head_commit:
+                        # Get blob hash for the file from commit tree
+                        blob = head_commit.tree[file_path]
+                        file_hashes[file_path] = blob.hexsha
+                    else:
+                        # 빈 저장소 - 파일시스템에서 직접 해시 계산
+                        full_path = self.repo_path / file_path
+                        if full_path.exists():
+                            file_hashes[file_path] = self._calculate_file_hash(full_path)
                 except (KeyError, AttributeError):
                     # File might be new or deleted, calculate hash from filesystem
                     full_path = self.repo_path / file_path
@@ -380,20 +460,50 @@ class GitMonitor:
     def _get_git_info(self) -> GitInfo:
         """Get current Git repository information"""
         try:
+            # 기본값 설정
+            current_commit = "unknown"
+            is_dirty = False
+            untracked_files = []
+            modified_files = []
+
+            # 커밋 SHA 가져오기
+            try:
+                current_commit = self.repo.head.commit.hexsha
+            except (ValueError, TypeError) as e:
+                logger.warning("Cannot get commit SHA", error=str(e))
+
+            # is_dirty 확인 (Windows에서 Errno 22 발생 가능)
+            try:
+                is_dirty = self.repo.is_dirty()
+            except OSError as e:
+                logger.warning("Cannot check is_dirty (Windows compatibility issue)", error=str(e))
+
+            # untracked_files 가져오기
+            try:
+                untracked_files = self.repo.untracked_files
+            except OSError as e:
+                logger.warning("Cannot get untracked_files", error=str(e))
+
+            # modified_files 가져오기 (index.diff가 Windows에서 문제 발생 가능)
+            try:
+                modified_files = [item.a_path for item in self.repo.index.diff(None)]
+            except OSError as e:
+                logger.warning("Cannot get modified_files (Windows compatibility issue)", error=str(e))
+
             return GitInfo(
                 repo_path=str(self.repo_path),
-                current_branch=self.repo.active_branch.name,
-                current_commit=self.repo.head.commit.hexsha,
+                current_branch=self._resolve_branch(),
+                current_commit=current_commit,
                 remote_url=self._get_remote_url(),
-                is_dirty=self.repo.is_dirty(),
-                untracked_files=self.repo.untracked_files,
-                modified_files=[item.a_path for item in self.repo.index.diff(None)]
+                is_dirty=is_dirty,
+                untracked_files=untracked_files,
+                modified_files=modified_files
             )
         except Exception as e:
             logger.error("Failed to get Git info", error=str(e))
             return GitInfo(
                 repo_path=str(self.repo_path),
-                current_branch="unknown",
+                current_branch=self.branch,
                 current_commit="unknown"
             )
 
@@ -483,9 +593,9 @@ class GitMonitor:
                 logger.error("Remote not found", remote_name=remote_name)
                 return False
 
-            # Use current branch if not specified
+            # Use configured branch if not specified
             if not branch:
-                branch = self.repo.active_branch.name
+                branch = self._resolve_branch()
 
             logger.info("Pulling latest changes from remote",
                        remote=remote_name,

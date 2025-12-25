@@ -61,16 +61,16 @@ class ServiceManager:
             )
 
             # Initialize UpdateService for automatic Git monitoring
-            repo_path = os.getenv("REPO_PATH", "./target_repo")
+            # repo_path는 더 이상 환경변수에서 가져오지 않고 등록된 프로젝트 사용
             state_dir = os.getenv("UPDATE_STATE_DIR", "./update_state")
 
             logger.info("Initializing UpdateService",
-                       repo_path=repo_path,
                        state_dir=state_dir,
-                       check_interval=update_config.check_interval_seconds)
+                       check_interval=update_config.check_interval_seconds,
+                       mode="project-based")
 
             self.update_service = UpdateService(
-                repo_path=repo_path,
+                repo_path=None,  # 프로젝트 기반 모니터링 사용
                 state_dir=state_dir,
                 parser_config=parser_config,
                 security_config=security_config,

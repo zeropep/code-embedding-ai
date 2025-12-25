@@ -26,7 +26,7 @@ class UpdateService:
     """Service for managing incremental updates to the embedding database"""
 
     def __init__(self,
-                 repo_path: str,
+                 repo_path: Optional[str] = None,
                  state_dir: str = "./update_state",
                  parser_config: ParserConfig = None,
                  security_config: SecurityConfig = None,
@@ -38,7 +38,7 @@ class UpdateService:
         self.update_config = update_config or UpdateConfig()
 
         # Initialize components
-        self.git_monitor = GitMonitor(repo_path, self.update_config)
+        self.git_monitor = GitMonitor(repo_path, self.update_config) if repo_path else None
         self.state_manager = StateManager(state_dir, self.update_config)
         self.code_parser = CodeParser(parser_config or ParserConfig())
         self.security_scanner = SecurityScanner(security_config or SecurityConfig())
@@ -55,10 +55,12 @@ class UpdateService:
     async def start(self) -> bool:
         """Start the update service"""
         try:
-            # Connect to Git repository
-            if not self.git_monitor.connect():
-                logger.error("Failed to connect to Git repository")
-                return False
+            # Connect to Git repository if repo_path is provided
+            if self.repo_path and self.git_monitor:
+                if self.git_monitor.connect():
+                    logger.info("Connected to default repository", repo_path=self.repo_path)
+                else:
+                    logger.warning("Failed to connect to default repository, will use project repositories")
 
             # Connect to vector store
             if not self.vector_store.connect():
@@ -70,9 +72,10 @@ class UpdateService:
 
             self._is_running = True
 
-            # Start periodic update task if configured
+            # Start periodic update task if configured (repo_path 없어도 시작)
             if self.update_config.check_interval_seconds > 0:
                 self._update_task = asyncio.create_task(self._periodic_update_loop())
+                logger.info("Periodic update loop started")
 
             logger.info("UpdateService started")
             return True
@@ -119,7 +122,8 @@ class UpdateService:
 
             # Check if any changes were detected
             if not detection_result.has_changes and not request.force_full_update:
-                logger.info("No changes detected", request_id=request.request_id)
+                logger.info("No new commits detected",
+                            current_commit=detection_result.repo_state.commit_hash[:8])
                 return UpdateResult(
                     request_id=request.request_id,
                     status=UpdateStatus.COMPLETED,
@@ -200,35 +204,54 @@ class UpdateService:
     async def _detect_changes(self, request: UpdateRequest) -> Optional[ChangeDetectionResult]:
         """Detect changes in the repository"""
         try:
-            # Pull latest changes from remote if project_id is provided
+            # 프로젝트 정보 조회 (브랜치 정보 포함)
+            git_branch = "main"  # 기본값
+            git_remote_url = None
+
             if request.project_id:
                 try:
                     from ..database.project_repository import ProjectRepository
                     project_repo = ProjectRepository()
                     project = project_repo.get(request.project_id)
 
-                    if project and project.git_remote_url:
-                        logger.info("Pulling latest changes from remote",
-                                   project_id=request.project_id,
-                                   remote_url=project.git_remote_url,
-                                   branch=project.git_branch)
-
-                        # Add or update remote
-                        if self.git_monitor.add_remote("origin", project.git_remote_url):
-                            # Pull latest changes
-                            if self.git_monitor.pull_latest("origin", project.git_branch):
-                                logger.info("Successfully pulled latest changes")
-                            else:
-                                logger.warning("Failed to pull latest changes, continuing with local state")
-                        else:
-                            logger.warning("Failed to add remote, continuing with local state")
+                    if project:
+                        git_branch = project.git_branch or "main"
+                        git_remote_url = project.git_remote_url
                 except Exception as e:
-                    logger.warning("Failed to pull from remote, continuing with local state", error=str(e))
+                    logger.warning("Failed to get project info, using defaults", error=str(e))
+
+            # 프로젝트별 GitMonitor 생성 (브랜치 정보 전달)
+            git_monitor = GitMonitor(
+                repo_path=request.repo_path,
+                config=self.update_config,
+                branch=git_branch
+            )
+
+            if not git_monitor.connect():
+                logger.error("Failed to connect to repository", repo_path=request.repo_path)
+                return None
+
+            # Pull latest changes from remote if available
+            if git_remote_url:
+                logger.info("Pulling latest changes from remote",
+                           project_id=request.project_id,
+                           remote_url=git_remote_url,
+                           branch=git_branch)
+
+                # Add or update remote
+                if git_monitor.add_remote("origin", git_remote_url):
+                    # Pull latest changes
+                    if git_monitor.pull_latest("origin", git_branch):
+                        logger.info("Successfully pulled latest changes")
+                    else:
+                        logger.warning("Failed to pull latest changes, continuing with local state")
+                else:
+                    logger.warning("Failed to add remote, continuing with local state")
 
             if request.force_full_update or self.state_manager.should_force_full_update():
                 # Force full scan
                 logger.info("Performing full repository scan")
-                return self.git_monitor.detect_changes(since_commit=None)
+                return git_monitor.detect_changes(since_commit=None)
             else:
                 # Incremental update
                 current_state = self.state_manager.current_state
@@ -236,10 +259,10 @@ class UpdateService:
                     logger.info("Performing incremental update",
                                 last_commit=current_state.commit_hash[:8])
                     # Use Git diff to detect changes since last known state
-                    return self.git_monitor.detect_changes(since_commit=current_state.commit_hash)
+                    return git_monitor.detect_changes(since_commit=current_state.commit_hash)
                 else:
                     logger.info("No previous state found, performing full scan")
-                    return self.git_monitor.detect_changes(since_commit=None)
+                    return git_monitor.detect_changes(since_commit=None)
 
         except Exception as e:
             logger.error("Change detection failed", error=str(e))
@@ -309,9 +332,15 @@ class UpdateService:
         logger.info("Processing files", count=len(file_paths))
 
         # Convert relative paths to absolute paths
+        # Use request.repo_path or fallback to self.repo_path
+        base_repo_path = request.repo_path if request else self.repo_path
+        if not base_repo_path:
+            logger.error("No repository path available")
+            raise ValueError("Repository path is required for processing files")
+
         full_file_paths = []
         for file_path in file_paths:
-            full_path = str(Path(self.repo_path) / file_path)
+            full_path = str(Path(base_repo_path) / file_path)
             if Path(full_path).exists():
                 full_file_paths.append(full_path)
             else:
@@ -371,7 +400,7 @@ class UpdateService:
             raise
 
     async def _periodic_update_loop(self):
-        """Periodic update loop"""
+        """Periodic update loop - 등록된 모든 프로젝트 순회"""
         logger.info("Starting periodic update loop",
                     interval_seconds=self.update_config.check_interval_seconds)
 
@@ -382,25 +411,91 @@ class UpdateService:
                 if not self._is_running:
                     break
 
-                logger.debug("Performing periodic update check")
-                await self.quick_update()
+                logger.info("Periodic update check started")
+
+                # 등록된 모든 active 프로젝트 조회
+                from ..database.project_repository import ProjectRepository
+                project_repo = ProjectRepository()
+                projects = project_repo.get_all(status="active")
+
+                if not projects:
+                    logger.debug("No active projects to monitor")
+                    continue
+
+                logger.info("Checking projects for updates", project_count=len(projects))
+
+                for project in projects:
+                    if not project.repository_path:
+                        logger.debug("Skipping project without repository_path",
+                                    project_id=project.project_id)
+                        continue
+
+                    try:
+                        logger.info("Checking project for updates",
+                                   project_id=project.project_id,
+                                   project_name=project.name,
+                                   repo_path=project.repository_path)
+
+                        # 프로젝트별 GitMonitor 생성 (브랜치 정보 전달)
+                        project_git_monitor = GitMonitor(
+                            repo_path=project.repository_path,
+                            config=self.update_config,
+                            branch=project.git_branch or "main"
+                        )
+
+                        if not project_git_monitor.connect():
+                            logger.warning("Failed to connect to project repository",
+                                          project_id=project.project_id,
+                                          repo_path=project.repository_path)
+                            continue
+
+                        # remote가 있으면 pull
+                        if project.git_remote_url:
+                            if project_git_monitor.add_remote("origin", project.git_remote_url):
+                                if project_git_monitor.pull_latest("origin", project.git_branch or "main"):
+                                    logger.info("Successfully pulled latest changes",
+                                               project_id=project.project_id)
+                                else:
+                                    logger.debug("No changes to pull",
+                                                project_id=project.project_id)
+
+                        # quick_update 호출하여 변경 감지 및 처리
+                        result = await self.quick_update(
+                            repo_path=project.repository_path,
+                            project_id=project.project_id,
+                            project_name=project.name
+                        )
+
+                        logger.info("Project update completed",
+                                   project_id=project.project_id,
+                                   status=result.status.value,
+                                   changes_detected=len(result.changes_detected))
+
+                    except Exception as e:
+                        logger.error("Error checking project",
+                                    project_id=project.project_id,
+                                    error=str(e))
+                        continue
 
             except asyncio.CancelledError:
+                logger.info("Periodic update loop cancelled")
                 break
             except Exception as e:
                 logger.error("Error in periodic update loop", error=str(e))
-                # Continue running even if one update fails
+                await asyncio.sleep(60)  # 에러 시 1분 후 재시도
 
         logger.info("Periodic update loop stopped")
 
     def get_status(self) -> Dict[str, Any]:
         """Get current update service status"""
-        git_info = self.git_monitor._get_git_info() if self.git_monitor.repo else None
+        git_info = None
+        if self.git_monitor and self.git_monitor.repo:
+            git_info = self.git_monitor._get_git_info()
 
         return {
             "service_running": self._is_running,
             "periodic_updates_enabled": self.update_config.check_interval_seconds > 0,
-            "git_connected": self.git_monitor.repo is not None,
+            "git_connected": self.git_monitor.repo if self.git_monitor else False,
             "vector_store_connected": self.vector_store._is_connected,
             "embedding_service_running": self.embedding_service._is_running,
             "current_git_info": git_info.repo_path if git_info else None,
@@ -417,16 +512,17 @@ class UpdateService:
 
         try:
             # Check Git repository
-            if self.git_monitor.repo:
+            if self.git_monitor and self.git_monitor.repo:
                 health["components"]["git"] = {
                     "status": "healthy",
                     "connected": True,
-                    "current_branch": self.git_monitor.repo.active_branch.name
+                    "current_branch": self.git_monitor._resolve_branch()
                 }
             else:
                 health["components"]["git"] = {
-                    "status": "unhealthy",
-                    "connected": False
+                    "status": "not_configured",
+                    "connected": False,
+                    "message": "No default repository configured, using project repositories"
                 }
 
             # Check vector store
