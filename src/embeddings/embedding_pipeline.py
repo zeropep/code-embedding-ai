@@ -266,7 +266,26 @@ class EmbeddingPipeline:
 
         # Calculate statistics
         embedding_success_count = sum(1 for chunk in embedded_chunks
-                                      if 'embedding' in chunk.metadata)
+                                      if chunk.metadata.get('embedding') is not None
+                                      and 'embedding_error' not in chunk.metadata)
+        embedding_failure_count = len(embedded_chunks) - embedding_success_count
+
+        # Collect error messages from failed chunks
+        errors = []
+        warnings = []
+        for chunk in embedded_chunks:
+            if 'embedding_error' in chunk.metadata:
+                errors.append(f"[{chunk.file_path}] {chunk.metadata['embedding_error']}")
+
+        # Determine status based on success rate
+        if embedding_failure_count == len(embedded_chunks) and len(embedded_chunks) > 0:
+            status = "error"
+            errors.insert(0, f"All {embedding_failure_count} embeddings failed")
+        elif embedding_failure_count > 0:
+            status = "partial_success"
+            warnings.append(f"{embedding_failure_count}/{len(embedded_chunks)} embeddings failed")
+        else:
+            status = "success"
 
         security_stats = self.security_scanner.generate_security_report(secured_chunks)
         embedding_metrics = self.embedding_service.get_metrics()
@@ -291,7 +310,7 @@ class EmbeddingPipeline:
                 sensitivity_dist[sensitivity] = sensitivity_dist.get(sensitivity, 0) + 1
 
         result = {
-            "status": "success",
+            "status": status,
             "source": source,
             "processing_summary": {
                 "total_files_parsed": len(parsed_files),
@@ -311,7 +330,7 @@ class EmbeddingPipeline:
             "security_stats": security_stats,
             "embedding_stats": {
                 "total_embeddings_generated": embedding_success_count,
-                "failed_embeddings": len(embedded_chunks) - embedding_success_count,
+                "failed_embeddings": embedding_failure_count,
                 "model_used": self.embedding_config.model_name,
                 "dimensions": self.embedding_config.dimensions,
                 "metrics": embedding_metrics,
@@ -328,7 +347,9 @@ class EmbeddingPipeline:
                     "last_modified": pf.last_modified
                 }
                 for pf in parsed_files
-            ]
+            ],
+            "errors": errors if errors else None,
+            "warnings": warnings if warnings else None
         }
 
         return result
@@ -362,7 +383,9 @@ class EmbeddingPipeline:
                 "embedding_success_rate": 0.0
             },
             "chunks": [],
-            "file_details": []
+            "file_details": [],
+            "errors": [error],
+            "warnings": None
         }
 
     async def health_check(self) -> Dict[str, Any]:

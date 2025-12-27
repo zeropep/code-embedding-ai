@@ -405,14 +405,24 @@ async def process_repository(
         if result["status"] == "error":
             raise HTTPException(status_code=500, detail=result.get("error", "Processing failed"))
 
+        # Determine response status based on result
+        if result["status"] == "partial_success":
+            response_status = RequestStatus.PARTIAL_SUCCESS
+            message = "Repository processed with warnings"
+        else:
+            response_status = RequestStatus.SUCCESS
+            message = "Repository processed successfully"
+
         return ProcessRepositoryResponse(
-            status=RequestStatus.SUCCESS,
-            message="Repository processed successfully",
+            status=response_status,
+            message=message,
             request_id=request_id,
             processing_summary=result.get("processing_summary"),
             parsing_stats=result.get("parsing_stats"),
             security_stats=result.get("security_stats"),
-            embedding_stats=result.get("embedding_stats")
+            embedding_stats=result.get("embedding_stats"),
+            errors=result.get("errors"),
+            warnings=result.get("warnings")
         )
 
     except Exception as e:
@@ -442,14 +452,24 @@ async def process_files(
         if result["status"] == "error":
             raise HTTPException(status_code=500, detail=result.get("error", "Processing failed"))
 
+        # Determine response status based on result
+        if result["status"] == "partial_success":
+            response_status = RequestStatus.PARTIAL_SUCCESS
+            message = "Files processed with warnings"
+        else:
+            response_status = RequestStatus.SUCCESS
+            message = "Files processed successfully"
+
         return ProcessRepositoryResponse(
-            status=RequestStatus.SUCCESS,
-            message="Files processed successfully",
+            status=response_status,
+            message=message,
             request_id=request_id,
             processing_summary=result.get("processing_summary"),
             parsing_stats=result.get("parsing_stats"),
             security_stats=result.get("security_stats"),
-            embedding_stats=result.get("embedding_stats")
+            embedding_stats=result.get("embedding_stats"),
+            errors=result.get("errors"),
+            warnings=result.get("warnings")
         )
 
     except Exception as e:
@@ -564,14 +584,24 @@ async def process_project(
                        total_chunks=total_chunks,
                        total_files=total_files)
 
+        # Determine response status based on result
+        if result["status"] == "partial_success":
+            response_status = RequestStatus.PARTIAL_SUCCESS
+            message = f"Project '{project.name}' processed with warnings"
+        else:
+            response_status = RequestStatus.SUCCESS
+            message = f"Project '{project.name}' processed successfully"
+
         return ProcessRepositoryResponse(
-            status=RequestStatus.SUCCESS,
-            message=f"Project '{project.name}' processed successfully",
+            status=response_status,
+            message=message,
             request_id=request_id,
             processing_summary=result.get("processing_summary"),
             parsing_stats=result.get("parsing_stats"),
             security_stats=result.get("security_stats"),
-            embedding_stats=result.get("embedding_stats")
+            embedding_stats=result.get("embedding_stats"),
+            errors=result.get("errors"),
+            warnings=result.get("warnings")
         )
 
     except HTTPException:

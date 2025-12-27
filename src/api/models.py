@@ -6,6 +6,7 @@ import time
 
 class RequestStatus(str, Enum):
     SUCCESS = "success"
+    PARTIAL_SUCCESS = "partial_success"
     ERROR = "error"
     PROCESSING = "processing"
 
@@ -92,6 +93,8 @@ class ProcessRepositoryResponse(BaseResponse):
     parsing_stats: Optional[Dict[str, Any]] = None
     security_stats: Optional[Dict[str, Any]] = None
     embedding_stats: Optional[Dict[str, Any]] = None
+    errors: Optional[List[str]] = None
+    warnings: Optional[List[str]] = None
 
 
 class SearchResult(BaseModel):
