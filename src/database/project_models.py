@@ -33,6 +33,7 @@ class Project:
     total_chunks: int = 0
     total_files: int = 0
     last_indexed_at: Optional[datetime] = None
+    last_processed_commit: Optional[str] = None  # Last commit processed from remote
 
     def to_dict(self) -> dict:
         """Convert to dictionary"""
@@ -49,7 +50,8 @@ class Project:
             "updated_at": self.updated_at.isoformat(),
             "total_chunks": self.total_chunks,
             "total_files": self.total_files,
-            "last_indexed_at": self.last_indexed_at.isoformat() if self.last_indexed_at else None
+            "last_indexed_at": self.last_indexed_at.isoformat() if self.last_indexed_at else None,
+            "last_processed_commit": self.last_processed_commit
         }
 
     @classmethod
@@ -69,7 +71,8 @@ class Project:
             total_chunks=data.get("total_chunks", 0),
             total_files=data.get("total_files", 0),
             last_indexed_at=datetime.fromisoformat(data["last_indexed_at"])
-                if data.get("last_indexed_at") else None
+                if data.get("last_indexed_at") else None,
+            last_processed_commit=data.get("last_processed_commit")
         )
 
     @staticmethod

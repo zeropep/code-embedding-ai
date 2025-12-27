@@ -51,6 +51,17 @@ class ProjectRepository:
                 ON projects(status)
             """)
 
+            # Add last_processed_commit column if it doesn't exist (schema migration)
+            try:
+                cursor.execute("""
+                    ALTER TABLE projects ADD COLUMN last_processed_commit TEXT
+                """)
+                logger.info("Added last_processed_commit column to projects table")
+            except sqlite3.OperationalError as e:
+                # Column already exists, ignore
+                if "duplicate column name" not in str(e).lower():
+                    raise
+
             conn.commit()
             conn.close()
             logger.info("Project database initialized", db_path=self.db_path)
@@ -68,8 +79,8 @@ class ProjectRepository:
             cursor.execute("""
                 INSERT INTO projects (
                     project_id, name, repository_path, description, git_remote_url, git_branch, primary_language, status,
-                    created_at, updated_at, total_chunks, total_files, last_indexed_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    created_at, updated_at, total_chunks, total_files, last_indexed_at, last_processed_commit
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 project.project_id,
                 project.name,
@@ -83,7 +94,8 @@ class ProjectRepository:
                 project.updated_at.isoformat(),
                 project.total_chunks,
                 project.total_files,
-                project.last_indexed_at.isoformat() if project.last_indexed_at else None
+                project.last_indexed_at.isoformat() if project.last_indexed_at else None,
+                project.last_processed_commit
             ))
 
             conn.commit()
@@ -177,6 +189,8 @@ class ProjectRepository:
                 project.total_files = updates["total_files"]
             if "last_indexed_at" in updates:
                 project.last_indexed_at = updates["last_indexed_at"]
+            if "last_processed_commit" in updates:
+                project.last_processed_commit = updates["last_processed_commit"]
 
             project.updated_at = datetime.now()
 
@@ -196,7 +210,8 @@ class ProjectRepository:
                     updated_at = ?,
                     total_chunks = ?,
                     total_files = ?,
-                    last_indexed_at = ?
+                    last_indexed_at = ?,
+                    last_processed_commit = ?
                 WHERE project_id = ?
             """, (
                 project.name,
@@ -210,6 +225,7 @@ class ProjectRepository:
                 project.total_chunks,
                 project.total_files,
                 project.last_indexed_at.isoformat() if project.last_indexed_at else None,
+                project.last_processed_commit,
                 project_id
             ))
 
@@ -287,5 +303,6 @@ class ProjectRepository:
             total_chunks=row["total_chunks"],
             total_files=row["total_files"],
             last_indexed_at=datetime.fromisoformat(row["last_indexed_at"])
-                if row["last_indexed_at"] else None
+                if row["last_indexed_at"] else None,
+            last_processed_commit=row["last_processed_commit"] if "last_processed_commit" in row.keys() else None
         )

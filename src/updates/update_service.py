@@ -449,6 +449,38 @@ class UpdateService:
                                           repo_path=project.repository_path)
                             continue
 
+                        # Check if we need to update (compare remote commit with last processed)
+                        should_update = True
+                        if project.git_remote_url and project.last_processed_commit:
+                            try:
+                                remote_commit = project_git_monitor.get_remote_latest_commit(
+                                    remote_url=project.git_remote_url,
+                                    branch=project.git_branch or "main"
+                                )
+
+                                if remote_commit:
+                                    if remote_commit == project.last_processed_commit:
+                                        logger.info("No changes in remote repository, skipping update",
+                                                   project_id=project.project_id,
+                                                   remote_commit=remote_commit[:8],
+                                                   last_processed=project.last_processed_commit[:8])
+                                        should_update = False
+                                    else:
+                                        logger.info("Remote repository has new commits",
+                                                   project_id=project.project_id,
+                                                   remote_commit=remote_commit[:8],
+                                                   last_processed=project.last_processed_commit[:8])
+                                else:
+                                    logger.warning("Failed to get remote commit, will attempt update anyway",
+                                                  project_id=project.project_id)
+                            except Exception as e:
+                                logger.warning("Error checking remote commit, will attempt update anyway",
+                                              project_id=project.project_id,
+                                              error=str(e))
+
+                        if not should_update:
+                            continue
+
                         # remote가 있으면 pull
                         if project.git_remote_url:
                             if project_git_monitor.add_remote("origin", project.git_remote_url):

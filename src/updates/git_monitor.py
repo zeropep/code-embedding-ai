@@ -656,3 +656,51 @@ class GitMonitor:
                         url=url,
                         error=str(e))
             return False
+
+    def get_remote_latest_commit(self, remote_url: str, branch: str = "main") -> Optional[str]:
+        """
+        Get latest commit ID from remote repository without local clone
+        Uses git ls-remote command
+
+        Args:
+            remote_url: Remote repository URL
+            branch: Branch name (default: main)
+
+        Returns:
+            Commit hash (SHA) or None if failed
+        """
+        try:
+            import subprocess
+
+            result = subprocess.run(
+                ["git", "ls-remote", remote_url, f"refs/heads/{branch}"],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+
+            if result.returncode == 0 and result.stdout:
+                commit_hash = result.stdout.split()[0]
+                logger.info("Retrieved remote commit",
+                           remote_url=remote_url,
+                           branch=branch,
+                           commit=commit_hash[:8])
+                return commit_hash
+            else:
+                logger.warning("Failed to get remote commit",
+                              remote_url=remote_url,
+                              branch=branch,
+                              stderr=result.stderr)
+                return None
+
+        except subprocess.TimeoutExpired:
+            logger.error("Timeout getting remote commit",
+                        remote_url=remote_url,
+                        branch=branch)
+            return None
+        except Exception as e:
+            logger.error("Failed to get remote commit",
+                        remote_url=remote_url,
+                        branch=branch,
+                        error=str(e))
+            return None

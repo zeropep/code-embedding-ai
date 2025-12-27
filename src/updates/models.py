@@ -132,9 +132,17 @@ class UpdateConfig:
     batch_size: int = 50
     max_file_size_mb: int = 10
 
+    # File patterns for filtering
+    include_patterns: List[str] = None
+    exclude_patterns: List[str] = None
+
     def __post_init__(self):
         if self.watch_extensions is None:
             self.watch_extensions = [".java", ".kt", ".html", ".xml", ".yml", ".yaml", ".properties"]
+        if self.include_patterns is None:
+            self.include_patterns = ["*.java", "*.kt", "*.py", "*.html", "*.xml", "*.yml", "*.yaml", "*.properties"]
+        if self.exclude_patterns is None:
+            self.exclude_patterns = ["*.class", "*.jar", "target/", "build/", ".git/", "__pycache__/", "*.pyc"]
 
 
 @dataclass

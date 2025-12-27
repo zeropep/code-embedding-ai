@@ -522,12 +522,43 @@ async def process_project(
             summary = result["processing_summary"]
             total_chunks = summary.get("chunks_with_embeddings", 0)
             total_files = summary.get("total_files_parsed", 0)
-            project_repo.update(project_id, {
+
+            # Prepare update data
+            update_data = {
                 "total_chunks": total_chunks,
                 "total_files": total_files,
                 "last_indexed_at": datetime.now(),
                 "status": "active"
-            })
+            }
+
+            # Get remote latest commit if git_remote_url is available
+            if project.git_remote_url:
+                try:
+                    from ..updates.git_monitor import GitMonitor
+                    git_monitor = GitMonitor(
+                        repo_path=project.repository_path,
+                        branch=project.git_branch or "main"
+                    )
+
+                    latest_commit = git_monitor.get_remote_latest_commit(
+                        remote_url=project.git_remote_url,
+                        branch=project.git_branch or "main"
+                    )
+
+                    if latest_commit:
+                        update_data["last_processed_commit"] = latest_commit
+                        logger.info("Saved remote commit after processing",
+                                   project_id=project_id,
+                                   commit=latest_commit[:8])
+                    else:
+                        logger.warning("Failed to get remote commit, skipping save",
+                                      project_id=project_id)
+                except Exception as e:
+                    logger.warning("Failed to retrieve remote commit",
+                                  project_id=project_id,
+                                  error=str(e))
+
+            project_repo.update(project_id, update_data)
             logger.info("Project statistics updated",
                        project_id=project_id,
                        total_chunks=total_chunks,
