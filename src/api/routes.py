@@ -924,12 +924,12 @@ async def reset_database(
     confirm: bool = Query(..., description="Confirmation flag"),
     vector_store: VectorStore = Depends(get_vector_store)
 ):
-    """Reset the entire database (vector store and project metadata)"""
+    """Reset the entire database (vector store, project metadata, and state data)"""
     if not confirm:
         raise HTTPException(status_code=400, detail="Reset operation must be confirmed")
 
     try:
-        logger.warning("Resetting entire database (vector store + projects)")
+        logger.warning("Resetting entire database (vector store + projects + state)")
 
         # Reset vector store (ChromaDB)
         vector_success = vector_store.reset_database()
@@ -939,10 +939,15 @@ async def reset_database(
         project_repo = ProjectRepository()
         project_success = project_repo.reset_all()
 
-        if vector_success and project_success:
+        # Reset state repository
+        from ..updates.state_repository import StateRepository
+        state_repo = StateRepository()
+        state_success = state_repo.reset_all()
+
+        if vector_success and project_success and state_success:
             return {
                 "status": "success",
-                "message": "Database reset successfully (vector store + projects)",
+                "message": "Database reset successfully (vector store + projects + state)",
                 "timestamp": time.time()
             }
         else:
@@ -951,6 +956,8 @@ async def reset_database(
                 error_details.append("vector store reset failed")
             if not project_success:
                 error_details.append("project reset failed")
+            if not state_success:
+                error_details.append("state reset failed")
             raise HTTPException(status_code=500, detail=f"Reset failed: {', '.join(error_details)}")
 
     except Exception as e:
