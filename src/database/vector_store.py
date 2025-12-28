@@ -560,3 +560,55 @@ class VectorStore:
         except Exception as e:
             logger.error("Failed to get project stats", project_id=project_id, error=str(e))
             return {'project_id': project_id, 'error': str(e)}
+
+    def get_all_documents(self, project_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Get all documents for BM25 index building
+
+        Args:
+            project_id: Optional project ID filter
+
+        Returns:
+            List of dicts with keys: chunk_id, content, metadata
+        """
+        if not self._ensure_connected():
+            return []
+
+        try:
+            logger.info("Fetching all documents for BM25 indexing", project_id=project_id)
+
+            # Build query
+            if project_id:
+                results = self.client.collection.get(
+                    where={"project_id": project_id},
+                    include=["metadatas", "documents"]
+                )
+            else:
+                results = self.client.collection.get(
+                    include=["metadatas", "documents"]
+                )
+
+            if not results.get('ids'):
+                logger.warning("No documents found", project_id=project_id)
+                return []
+
+            # Build document list
+            documents = []
+            for i, chunk_id in enumerate(results['ids']):
+                metadata = results['metadatas'][i] if i < len(results['metadatas']) else {}
+                content = results['documents'][i] if i < len(results['documents']) else ""
+
+                documents.append({
+                    "chunk_id": chunk_id,
+                    "content": content,
+                    "metadata": metadata
+                })
+
+            logger.info("Documents fetched successfully",
+                       count=len(documents),
+                       project_id=project_id)
+            return documents
+
+        except Exception as e:
+            logger.error("Failed to get all documents", error=str(e), project_id=project_id)
+            return []

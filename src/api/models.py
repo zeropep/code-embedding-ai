@@ -17,6 +17,12 @@ class SearchType(str, Enum):
     HYBRID = "hybrid"
 
 
+class SearchMode(str, Enum):
+    HYBRID = "hybrid"
+    SEMANTIC = "semantic"
+    KEYWORD = "keyword"
+
+
 class ProcessingMode(str, Enum):
     FULL = "full"
     INCREMENTAL = "incremental"
@@ -245,6 +251,23 @@ class SimilarCodeRequest(BaseModel):
     min_similarity: float = Field(default=0.7, ge=0.0, le=1.0)
     include_same_file: bool = Field(default=False, description="Include results from the same file")
     project_id: Optional[str] = Field(default=None, description="Filter by specific project ID")
+
+
+class HybridSearchRequest(BaseModel):
+    query: str = Field(..., description="검색 쿼리")
+    mode: SearchMode = Field(default=SearchMode.HYBRID, description="검색 모드")
+    top_k: int = Field(default=10, ge=1, le=100, description="반환할 결과 수")
+    alpha: float = Field(default=0.5, ge=0.0, le=1.0, description="시맨틱 검색 가중치 (0=키워드만, 1=시맨틱만)")
+    project_id: Optional[str] = Field(default=None, description="프로젝트 ID 필터")
+    min_similarity: float = Field(default=0.4, ge=0.0, le=1.0, description="최소 유사도")
+    include_content: bool = Field(default=True, description="코드 내용 포함 여부")
+    filters: Optional[Dict[str, Any]] = Field(default=None, description="추가 메타데이터 필터")
+
+    @validator('query')
+    def validate_query(cls, v):
+        if not v.strip():
+            raise ValueError("Query cannot be empty")
+        return v.strip()
 
 
 # Administrative Models

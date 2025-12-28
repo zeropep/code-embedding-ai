@@ -11,9 +11,10 @@ from .models import (
     SystemStatusResponse, MetricsResponse, BatchDeleteRequest,
     ProjectListResponse, ProjectStatsResponse, ProjectInfo,
     ProjectCreateRequest, ProjectCreateResponse, ProjectDetailResponse,
-    ProjectUpdateRequest, ProjectUpdateResponse, ProjectDeleteResponse
+    ProjectUpdateRequest, ProjectUpdateResponse, ProjectDeleteResponse,
+    HybridSearchRequest, SearchMode
 )
-from .dependencies import get_embedding_pipeline, get_update_service, get_vector_store
+from .dependencies import get_embedding_pipeline, get_update_service, get_vector_store, get_hybrid_search_service
 from ..embeddings.embedding_pipeline import EmbeddingPipeline
 from ..updates.update_service import UpdateService
 from ..updates.models import UpdateRequest
@@ -268,6 +269,86 @@ async def metadata_search(
     except Exception as e:
         logger.error("Metadata search failed", error=str(e))
         raise HTTPException(status_code=500, detail=f"Metadata search failed: {str(e)}")
+
+
+@search_router.post("/", response_model=SearchResponse)
+async def hybrid_search(
+    request: HybridSearchRequest,
+    pipeline: EmbeddingPipeline = Depends(get_embedding_pipeline),
+    vector_store: VectorStore = Depends(get_vector_store)
+):
+    """하이브리드 검색 (시맨틱 + 키워드)"""
+    try:
+        from ..search.hybrid_search import HybridSearchService
+
+        start_time = time.time()
+
+        logger.info("Hybrid search request",
+                   query=request.query,
+                   mode=request.mode,
+                   alpha=request.alpha,
+                   top_k=request.top_k)
+
+        # Determine alpha based on mode
+        if request.mode == SearchMode.SEMANTIC:
+            alpha = 1.0  # Semantic only
+        elif request.mode == SearchMode.KEYWORD:
+            alpha = 0.0  # Keyword only
+        else:  # HYBRID
+            alpha = request.alpha
+
+        # Create hybrid search service
+        hybrid_service = HybridSearchService(
+            vector_store=vector_store,
+            embedding_pipeline=pipeline
+        )
+
+        # Perform hybrid search
+        search_results = await hybrid_service.search(
+            query=request.query,
+            top_k=request.top_k,
+            alpha=alpha,
+            project_id=request.project_id,
+            min_similarity=request.min_similarity
+        )
+
+        # Convert to response format
+        results = []
+        for result in search_results:
+            search_result = SearchResult(
+                chunk_id=result.chunk_id,
+                similarity_score=result.similarity_score,
+                file_path=result.metadata.get("file_path", ""),
+                function_name=result.metadata.get("function_name"),
+                class_name=result.metadata.get("class_name"),
+                layer_type=result.metadata.get("layer_type", "Unknown"),
+                start_line=result.metadata.get("start_line", 0),
+                end_line=result.metadata.get("end_line", 0),
+                content=result.content if request.include_content else None,
+                metadata=result.metadata
+            )
+            results.append(search_result)
+
+        search_time = (time.time() - start_time) * 1000
+
+        return SearchResponse(
+            status=RequestStatus.SUCCESS,
+            message=f"Found {len(results)} results using {request.mode} search",
+            results=results,
+            total_results=len(results),
+            query_info={
+                "query": request.query,
+                "search_mode": request.mode,
+                "alpha": alpha,
+                "top_k": request.top_k,
+                "min_similarity": request.min_similarity
+            },
+            search_time_ms=search_time
+        )
+
+    except Exception as e:
+        logger.error("Hybrid search failed", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Hybrid search failed: {str(e)}")
 
 
 @search_router.post("/similar-code", response_model=SearchResponse)

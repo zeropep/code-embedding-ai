@@ -190,6 +190,19 @@ async def get_vector_store() -> VectorStore:
     return service_manager.vector_store
 
 
+async def get_hybrid_search_service():
+    """Get hybrid search service dependency"""
+    from ..search.hybrid_search import HybridSearchService
+
+    vector_store = await get_vector_store()
+    pipeline = await get_embedding_pipeline()
+
+    return HybridSearchService(
+        vector_store=vector_store,
+        embedding_pipeline=pipeline
+    )
+
+
 # Configuration dependencies
 @lru_cache()
 def get_parser_config() -> ParserConfig:
