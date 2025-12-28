@@ -7,8 +7,9 @@ import asyncio
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
 import aiohttp
 
-from src.embeddings.models import EmbeddingConfig, EmbeddingRequest, EmbeddingResult, EmbeddingStatus
+from src.embeddings.models import EmbeddingConfig, EmbeddingRequest, EmbeddingResult, EmbeddingStatus, EmbeddingTaskType
 from src.embeddings.jina_client import JinaEmbeddingClient
+from src.embeddings.local_embedding_client import LocalEmbeddingClient
 from src.embeddings.embedding_service import EmbeddingService
 from src.embeddings.embedding_pipeline import EmbeddingPipeline
 
@@ -210,6 +211,215 @@ class TestJinaEmbeddingClient:
         client._cache_embedding("test", [0.1, 0.2])
         cached = client._get_cached_embedding("test")
         assert cached is None
+
+    @pytest.mark.asyncio
+    async def test_ensure_model_loaded(self, embedding_config):
+        """Test _ensure_model_loaded method (interface unification)"""
+        client = JinaEmbeddingClient(embedding_config)
+
+        # Should be no-op and not raise any exception
+        await client._ensure_model_loaded()
+        # Test passes if no exception is raised
+        assert True
+
+    @pytest.mark.asyncio
+    async def test_shutdown_method(self, embedding_config):
+        """Test shutdown method (interface unification)"""
+        client = JinaEmbeddingClient(embedding_config)
+
+        # Create a session first
+        await client._ensure_session()
+        assert client.session is not None
+
+        # Shutdown should close the session
+        await client.shutdown()
+        assert client.session is None
+
+    @pytest.mark.asyncio
+    @patch('aiohttp.ClientSession.post')
+    async def test_generate_embedding_with_task_type(self, mock_post, embedding_config):
+        """Test generate_embedding with task_type parameter"""
+        # Mock response
+        mock_response = Mock()
+        mock_response.status = 200
+        mock_response.json = AsyncMock(return_value={
+            "data": [{"embedding": [0.1, 0.2, 0.3, 0.4]}]
+        })
+
+        mock_post.return_value.__aenter__.return_value = mock_response
+
+        client = JinaEmbeddingClient(embedding_config)
+
+        async with client:
+            # Test with task_type parameter
+            result = await client.generate_embedding(
+                "test content",
+                "test_id",
+                task_type="retrieval.document"
+            )
+
+            assert result.status == EmbeddingStatus.COMPLETED
+            assert result.vector == [0.1, 0.2, 0.3, 0.4]
+            assert result.request_id == "test_id"
+
+    @pytest.mark.asyncio
+    @patch('aiohttp.ClientSession.post')
+    async def test_generate_embeddings_batch_with_task_type(self, mock_post, embedding_config):
+        """Test generate_embeddings_batch with task_type parameter"""
+        # Mock response with multiple embeddings
+        mock_response = Mock()
+        mock_response.status = 200
+        mock_response.json = AsyncMock(return_value={
+            "data": [
+                {"embedding": [0.1, 0.2]},
+                {"embedding": [0.3, 0.4]},
+                {"embedding": [0.5, 0.6]}
+            ]
+        })
+
+        mock_post.return_value.__aenter__.return_value = mock_response
+
+        client = JinaEmbeddingClient(embedding_config)
+
+        contents = ["content1", "content2", "content3"]
+        request_ids = ["id1", "id2", "id3"]
+
+        async with client:
+            # Test with task_type parameter
+            results = await client.generate_embeddings_batch(
+                contents,
+                request_ids,
+                task_type="retrieval.document"
+            )
+
+            assert len(results) == 3
+            for i, result in enumerate(results):
+                assert result.status == EmbeddingStatus.COMPLETED
+                assert result.request_id == request_ids[i]
+                assert len(result.vector) == 2
+
+
+class TestClientInterfaceUnification:
+    """Test interface unification between JinaEmbeddingClient and LocalEmbeddingClient"""
+
+    @pytest.fixture
+    def embedding_config(self):
+        """Embedding configuration for tests"""
+        return EmbeddingConfig(
+            api_key="test_api_key",
+            api_url="https://api.test.com/embeddings",
+            model_name="test-model",
+            batch_size=5,
+            timeout=10
+        )
+
+    def test_jina_client_has_required_methods(self, embedding_config):
+        """Verify JinaEmbeddingClient has all required interface methods"""
+        client = JinaEmbeddingClient(embedding_config)
+
+        # Check required methods exist
+        assert hasattr(client, '_ensure_model_loaded'), "Missing _ensure_model_loaded method"
+        assert hasattr(client, 'shutdown'), "Missing shutdown method"
+        assert hasattr(client, 'generate_embedding'), "Missing generate_embedding method"
+        assert hasattr(client, 'generate_embeddings_batch'), "Missing generate_embeddings_batch method"
+        assert hasattr(client, 'close'), "Missing close method"
+
+        # Verify methods are callable
+        assert callable(client._ensure_model_loaded), "_ensure_model_loaded not callable"
+        assert callable(client.shutdown), "shutdown not callable"
+        assert callable(client.generate_embedding), "generate_embedding not callable"
+        assert callable(client.generate_embeddings_batch), "generate_embeddings_batch not callable"
+
+    def test_local_client_has_required_methods(self, embedding_config):
+        """Verify LocalEmbeddingClient has all required interface methods"""
+        client = LocalEmbeddingClient(embedding_config)
+
+        # Check required methods exist
+        assert hasattr(client, '_ensure_model_loaded'), "Missing _ensure_model_loaded method"
+        assert hasattr(client, 'shutdown'), "Missing shutdown method"
+        assert hasattr(client, 'generate_embedding'), "Missing generate_embedding method"
+        assert hasattr(client, 'generate_embeddings_batch'), "Missing generate_embeddings_batch method"
+        assert hasattr(client, 'close'), "Missing close method"
+
+        # Verify methods are callable
+        assert callable(client._ensure_model_loaded), "_ensure_model_loaded not callable"
+        assert callable(client.shutdown), "shutdown not callable"
+        assert callable(client.generate_embedding), "generate_embedding not callable"
+        assert callable(client.generate_embeddings_batch), "generate_embeddings_batch not callable"
+
+    @pytest.mark.asyncio
+    async def test_jina_client_method_signatures(self, embedding_config):
+        """Test that JinaEmbeddingClient methods accept expected parameters"""
+        client = JinaEmbeddingClient(embedding_config)
+
+        # Test _ensure_model_loaded (no-op)
+        await client._ensure_model_loaded()
+
+        # Test shutdown method existence and signature
+        await client._ensure_session()
+        await client.shutdown()
+        assert client.session is None
+
+    @pytest.mark.asyncio
+    async def test_local_client_method_signatures(self, embedding_config):
+        """Test that LocalEmbeddingClient methods accept expected parameters"""
+        client = LocalEmbeddingClient(embedding_config)
+
+        # Test _ensure_model_loaded can be called
+        # Note: This might skip due to missing sentence-transformers, but signature is valid
+        try:
+            await client._ensure_model_loaded()
+        except ImportError:
+            # Expected if sentence-transformers not installed
+            pass
+
+    def test_generate_embedding_signature_compatibility(self, embedding_config):
+        """Test that both clients accept same parameters for generate_embedding"""
+        import inspect
+
+        jina_client = JinaEmbeddingClient(embedding_config)
+        local_client = LocalEmbeddingClient(embedding_config)
+
+        jina_sig = inspect.signature(jina_client.generate_embedding)
+        local_sig = inspect.signature(local_client.generate_embedding)
+
+        # Both should have: content, request_id, task_type parameters
+        jina_params = set(jina_sig.parameters.keys())
+        local_params = set(local_sig.parameters.keys())
+
+        # core parameters should match
+        assert 'content' in jina_params, "JinaEmbeddingClient.generate_embedding missing 'content'"
+        assert 'content' in local_params, "LocalEmbeddingClient.generate_embedding missing 'content'"
+
+        assert 'request_id' in jina_params, "JinaEmbeddingClient.generate_embedding missing 'request_id'"
+        assert 'request_id' in local_params, "LocalEmbeddingClient.generate_embedding missing 'request_id'"
+
+        assert 'task_type' in jina_params, "JinaEmbeddingClient.generate_embedding missing 'task_type'"
+        assert 'task_type' in local_params, "LocalEmbeddingClient.generate_embedding missing 'task_type'"
+
+    def test_generate_embeddings_batch_signature_compatibility(self, embedding_config):
+        """Test that both clients accept same parameters for generate_embeddings_batch"""
+        import inspect
+
+        jina_client = JinaEmbeddingClient(embedding_config)
+        local_client = LocalEmbeddingClient(embedding_config)
+
+        jina_sig = inspect.signature(jina_client.generate_embeddings_batch)
+        local_sig = inspect.signature(local_client.generate_embeddings_batch)
+
+        # Both should have: contents, request_ids, task_type parameters
+        jina_params = set(jina_sig.parameters.keys())
+        local_params = set(local_sig.parameters.keys())
+
+        # core parameters should match
+        assert 'contents' in jina_params, "JinaEmbeddingClient.generate_embeddings_batch missing 'contents'"
+        assert 'contents' in local_params, "LocalEmbeddingClient.generate_embeddings_batch missing 'contents'"
+
+        assert 'request_ids' in jina_params, "JinaEmbeddingClient.generate_embeddings_batch missing 'request_ids'"
+        assert 'request_ids' in local_params, "LocalEmbeddingClient.generate_embeddings_batch missing 'request_ids'"
+
+        assert 'task_type' in jina_params, "JinaEmbeddingClient.generate_embeddings_batch missing 'task_type'"
+        assert 'task_type' in local_params, "LocalEmbeddingClient.generate_embeddings_batch missing 'task_type'"
 
 
 class TestEmbeddingService:

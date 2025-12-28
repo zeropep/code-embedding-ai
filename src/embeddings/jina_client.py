@@ -26,6 +26,10 @@ class JinaEmbeddingClient:
                     batch_size=config.batch_size,
                     max_concurrent=config.max_concurrent_requests)
 
+    async def _ensure_model_loaded(self):
+        """No-op for API mode - model is hosted remotely by Jina"""
+        pass
+
     async def __aenter__(self):
         """Async context manager entry"""
         await self._ensure_session()
@@ -53,7 +57,12 @@ class JinaEmbeddingClient:
             await self.session.close()
             self.session = None
 
-    async def generate_embedding(self, content: str, request_id: str = "") -> EmbeddingResult:
+    async def shutdown(self):
+        """Shutdown the client - delegates to close()"""
+        await self.close()
+
+    async def generate_embedding(self, content: str, request_id: str = "",
+                                 task_type=None) -> EmbeddingResult:
         """Generate embedding for single content"""
         start_time = time.time()
 
@@ -103,7 +112,8 @@ class JinaEmbeddingClient:
             )
 
     async def generate_embeddings_batch(self, contents: List[str],
-                                        request_ids: List[str] = None) -> List[EmbeddingResult]:
+                                        request_ids: List[str] = None,
+                                        task_type=None) -> List[EmbeddingResult]:
         """Generate embeddings for multiple contents in batch"""
         if request_ids is None:
             request_ids = [f"batch_{i}" for i in range(len(contents))]
