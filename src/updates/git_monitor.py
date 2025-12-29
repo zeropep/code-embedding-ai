@@ -764,10 +764,30 @@ class GitMonitor:
                        changes_count=len(changed_files),
                        detection_time=detection_time)
 
+            # Convert Path objects to FileChange objects
+            detected_changes = [
+                FileChange(
+                    file_path=str(file_path.relative_to(self.repo_path)),
+                    change_type=ChangeType.MODIFIED,
+                    file_hash=None
+                )
+                for file_path in changed_files
+            ]
+
+            # Get current state and git info
+            repo_state = self.get_current_state()
+            if not repo_state:
+                logger.error("Failed to get repository state for commit", commit=commit_hash[:8])
+                return None
+
+            git_info = self._get_git_info()
+
             return ChangeDetectionResult(
-                changed_files=changed_files,
-                is_full_scan=False,
-                detection_time=detection_time
+                repo_state=repo_state,
+                detected_changes=detected_changes,
+                git_info=git_info,
+                detection_time=detection_time,
+                is_full_scan=False
             )
 
         except Exception as e:

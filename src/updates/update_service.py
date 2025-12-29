@@ -284,7 +284,7 @@ class UpdateService:
         else:
             # New pattern: called with changes, project_id, project_name
             request_id = f"changes_{int(time.time())}"
-            detected_changes = changes.changed_files if hasattr(changes, 'changed_files') else []
+            detected_changes = changes.detected_changes if hasattr(changes, 'detected_changes') else []
             proj_id = project_id
             proj_name = project_name
 
@@ -466,7 +466,7 @@ class UpdateService:
                 files_processed=0
             )
 
-        if not changes.changed_files:
+        if not changes.detected_changes:
             logger.info("No relevant changes in commit",
                        commit=commit_hash[:8])
             return UpdateResult(
