@@ -3,7 +3,7 @@ import hashlib
 import time
 import os
 from pathlib import Path
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Set
 import structlog
 
 from .models import (FileChange, ChangeType, RepositoryState, GitInfo,
@@ -704,3 +704,90 @@ class GitMonitor:
                         branch=branch,
                         error=str(e))
             return None
+
+    def get_commits_since(self, since_commit: str) -> List[str]:
+        """
+        Get list of commit hashes between since_commit and HEAD (oldest first)
+
+        Args:
+            since_commit: Starting commit hash (exclusive)
+
+        Returns:
+            List of commit hashes in chronological order (oldest first)
+        """
+        try:
+            commits = list(self.repo.iter_commits(f'{since_commit}..HEAD'))
+            # iter_commits returns newest first, reverse for chronological order
+            return [c.hexsha for c in reversed(commits)]
+        except Exception as e:
+            logger.error("Failed to get commits since", since_commit=since_commit[:8], error=str(e))
+            return []
+
+    def detect_changes_for_commit(self, commit_hash: str) -> Optional[ChangeDetectionResult]:
+        """
+        Detect changes introduced by a single commit
+
+        Args:
+            commit_hash: The commit to analyze
+
+        Returns:
+            ChangeDetectionResult with changes from this specific commit only
+        """
+        start_time = time.time()
+
+        try:
+            commit = self.repo.commit(commit_hash)
+            parent = commit.parents[0] if commit.parents else None
+
+            changed_files: Set[Path] = set()
+
+            if parent:
+                # Compare with parent commit
+                diff = parent.diff(commit)
+            else:
+                # First commit - all files are new
+                diff = commit.diff(None)  # Compare with empty tree
+
+            for diff_item in diff:
+                # Get the file path (a_path for deleted, b_path for added/modified)
+                file_path = diff_item.b_path if diff_item.b_path else diff_item.a_path
+                if file_path:
+                    full_path = self.repo_path / file_path
+                    # Only include if file exists and matches our extensions
+                    if full_path.exists() and self._should_process_file(full_path):
+                        changed_files.add(full_path)
+
+            detection_time = time.time() - start_time
+
+            logger.info("Change detection for commit completed",
+                       commit=commit_hash[:8],
+                       changes_count=len(changed_files),
+                       detection_time=detection_time)
+
+            return ChangeDetectionResult(
+                changed_files=changed_files,
+                is_full_scan=False,
+                detection_time=detection_time
+            )
+
+        except Exception as e:
+            logger.error("Failed to detect changes for commit",
+                        commit=commit_hash[:8],
+                        error=str(e))
+            return None
+
+    def _should_process_file(self, file_path: Path) -> bool:
+        """Check if file should be processed based on include/exclude patterns"""
+        file_str = str(file_path)
+
+        # Check exclude patterns first
+        for pattern in self.config.exclude_patterns:
+            if self._matches_pattern(file_str, pattern):
+                return False
+
+        # Check include patterns
+        for pattern in self.config.include_patterns:
+            if self._matches_pattern(file_str, pattern):
+                return True
+
+        return False

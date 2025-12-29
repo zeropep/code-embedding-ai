@@ -71,14 +71,17 @@ class LocalEmbeddingClient:
             # Define model loading function with retry
             async def load_model():
                 loop = asyncio.get_event_loop()
-                return await loop.run_in_executor(
-                    None,
-                    lambda: SentenceTransformer(
+                def _load():
+                    # Load on CPU first to avoid meta tensor issues
+                    model = SentenceTransformer(
                         self.config.model_name,
-                        device=device,
                         trust_remote_code=True
                     )
-                )
+                    # Then move to target device if not CPU
+                    if device != "cpu":
+                        model = model.to(device)
+                    return model
+                return await loop.run_in_executor(None, _load)
 
             # Retry configuration for model loading (fewer retries, longer delays)
             model_retry_config = RetryConfig(
@@ -102,21 +105,20 @@ class LocalEmbeddingClient:
                         error=str(e)
                     )
                 )
-            except (RuntimeError, Exception) as e:
-                # CUDA initialization failed, fallback to CPU
-                if "CUDA" in str(e) or "cuda" in str(e):
-                    logger.warning("CUDA initialization failed, falling back to CPU",
+            except (RuntimeError, NotImplementedError, Exception) as e:
+                # CUDA initialization or meta tensor failed, fallback to CPU
+                if "CUDA" in str(e) or "cuda" in str(e) or "meta tensor" in str(e):
+                    logger.warning("GPU initialization failed, falling back to CPU",
                                   error=str(e))
                     device = "cpu"
                     loop = asyncio.get_event_loop()
-                    self.model = await loop.run_in_executor(
-                        None,
-                        lambda: SentenceTransformer(
+                    def _load_cpu():
+                        # Load on CPU (no device parameter needed)
+                        return SentenceTransformer(
                             self.config.model_name,
-                            device="cpu",
                             trust_remote_code=True
                         )
-                    )
+                    self.model = await loop.run_in_executor(None, _load_cpu)
                 else:
                     raise
 

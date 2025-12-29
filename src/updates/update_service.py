@@ -132,7 +132,7 @@ class UpdateService:
                 )
 
             # Process changes
-            result = await self._process_changes(request, detection_result)
+            result = await self._process_changes(detection_result, request=request)
 
             # Save repository state
             self.state_manager.save_repository_state(detection_result.repo_state)
@@ -268,13 +268,30 @@ class UpdateService:
             logger.error("Change detection failed", error=str(e))
             return None
 
-    async def _process_changes(self, request: UpdateRequest,
-                               detection_result: ChangeDetectionResult) -> UpdateResult:
-        """Process detected changes"""
+    async def _process_changes(self,
+                               changes: ChangeDetectionResult,
+                               project_id: str = None,
+                               project_name: str = None,
+                               request: UpdateRequest = None) -> UpdateResult:
+        """Process detected changes - flexible signature for both old and new usage"""
+        # Support both old and new calling patterns
+        if request is not None:
+            # Old pattern: called with request and detection_result
+            request_id = request.request_id
+            detected_changes = changes.detected_changes if hasattr(changes, 'detected_changes') else []
+            proj_id = request.project_id
+            proj_name = request.project_name
+        else:
+            # New pattern: called with changes, project_id, project_name
+            request_id = f"changes_{int(time.time())}"
+            detected_changes = changes.changed_files if hasattr(changes, 'changed_files') else []
+            proj_id = project_id
+            proj_name = project_name
+
         result = UpdateResult(
-            request_id=request.request_id,
+            request_id=request_id,
             status=UpdateStatus.PROCESSING,
-            changes_detected=detection_result.detected_changes
+            changes_detected=detected_changes
         )
 
         try:
@@ -282,14 +299,20 @@ class UpdateService:
             files_to_delete = []
             files_to_process = []
 
-            for change in detection_result.detected_changes:
-                if change.change_type == ChangeType.DELETED:
-                    files_to_delete.append(change.file_path)
-                elif change.change_type in [ChangeType.ADDED, ChangeType.MODIFIED, ChangeType.RENAMED]:
-                    # Modified files need to delete old chunks first
-                    if change.change_type in [ChangeType.MODIFIED, ChangeType.RENAMED]:
+            # Handle both FileChange objects and Path objects
+            for change in detected_changes:
+                if hasattr(change, 'change_type'):
+                    # FileChange object
+                    if change.change_type == ChangeType.DELETED:
                         files_to_delete.append(change.file_path)
-                    files_to_process.append(change.file_path)
+                    elif change.change_type in [ChangeType.ADDED, ChangeType.MODIFIED, ChangeType.RENAMED]:
+                        # Modified files need to delete old chunks first
+                        if change.change_type in [ChangeType.MODIFIED, ChangeType.RENAMED]:
+                            files_to_delete.append(change.file_path)
+                        files_to_process.append(change.file_path)
+                else:
+                    # Path object (from changed_files set)
+                    files_to_process.append(str(change))
 
             # Delete removed/modified files from vector store (to avoid duplicates)
             if files_to_delete:
@@ -297,7 +320,18 @@ class UpdateService:
 
             # Process new/modified files
             if files_to_process:
-                await self._process_files(files_to_process, result, request)
+                # Create a minimal request object for _process_files
+                if request is not None:
+                    await self._process_files(files_to_process, result, request)
+                else:
+                    # Create temporary request object
+                    temp_request = UpdateRequest(
+                        request_id=request_id,
+                        repo_path=str(Path(files_to_process[0]).parent) if files_to_process else None,
+                        project_id=proj_id,
+                        project_name=proj_name
+                    )
+                    await self._process_files(files_to_process, result, temp_request)
 
             result.status = UpdateStatus.COMPLETED
 
@@ -399,6 +433,62 @@ class UpdateService:
             logger.error("Failed to process files", error=str(e))
             raise
 
+    async def _process_single_commit(
+        self,
+        project: Any,
+        commit_hash: str,
+        git_monitor: GitMonitor
+    ) -> UpdateResult:
+        """
+        Process changes from a single commit
+
+        Args:
+            project: Project object
+            commit_hash: Commit hash to process
+            git_monitor: GitMonitor instance
+
+        Returns:
+            UpdateResult with processing status
+        """
+        logger.info("Processing single commit",
+                   project_id=project.project_id,
+                   commit=commit_hash[:8])
+
+        # Detect changes for this specific commit
+        changes = git_monitor.detect_changes_for_commit(commit_hash)
+
+        if changes is None:
+            return UpdateResult(
+                request_id=f"commit_{commit_hash[:8]}",
+                status=UpdateStatus.FAILED,
+                changes_detected=[],
+                error_message=f"Failed to detect changes for commit {commit_hash[:8]}",
+                files_processed=0
+            )
+
+        if not changes.changed_files:
+            logger.info("No relevant changes in commit",
+                       commit=commit_hash[:8])
+            return UpdateResult(
+                request_id=f"commit_{commit_hash[:8]}",
+                status=UpdateStatus.COMPLETED,
+                changes_detected=[],
+                files_processed=0
+            )
+
+        # Process the changes using existing logic
+        # Create temporary request with repo_path
+        temp_request = UpdateRequest(
+            request_id=f"commit_{commit_hash[:8]}_{int(time.time())}",
+            repo_path=project.repository_path,
+            project_id=project.project_id,
+            project_name=project.name
+        )
+        return await self._process_changes(
+            changes=changes,
+            request=temp_request
+        )
+
     async def _periodic_update_loop(self):
         """Periodic update loop - 등록된 모든 프로젝트 순회"""
         logger.info("Starting periodic update loop",
@@ -491,17 +581,44 @@ class UpdateService:
                                     logger.debug("No changes to pull",
                                                 project_id=project.project_id)
 
-                        # quick_update 호출하여 변경 감지 및 처리
-                        result = await self.quick_update(
-                            repo_path=project.repository_path,
-                            project_id=project.project_id,
-                            project_name=project.name
-                        )
+                        # Get list of new commits
+                        commits = project_git_monitor.get_commits_since(project.last_processed_commit or "")
 
-                        logger.info("Project update completed",
+                        if not commits:
+                            logger.debug("No new commits to process",
+                                        project_id=project.project_id)
+                            continue
+
+                        logger.info("Found new commits to process",
                                    project_id=project.project_id,
-                                   status=result.status.value,
-                                   changes_detected=len(result.changes_detected))
+                                   commit_count=len(commits))
+
+                        # Process each commit sequentially
+                        for commit_hash in commits:
+                            result = await self._process_single_commit(
+                                project=project,
+                                commit_hash=commit_hash,
+                                git_monitor=project_git_monitor
+                            )
+
+                            if result.status == UpdateStatus.COMPLETED:
+                                # Update last_processed_commit only on full success
+                                from ..database.project_repository import ProjectRepository
+                                project_repo = ProjectRepository()
+                                project_repo.update(project.project_id, {
+                                    "last_processed_commit": commit_hash
+                                })
+                                logger.info("Commit processed successfully",
+                                           project_id=project.project_id,
+                                           commit=commit_hash[:8])
+                            else:
+                                # Stop processing on failure, retry this commit next time
+                                logger.warning("Commit processing failed, stopping batch",
+                                              project_id=project.project_id,
+                                              commit=commit_hash[:8],
+                                              status=result.status.value,
+                                              error_message=result.error_message)
+                                break
 
                     except Exception as e:
                         logger.error("Error checking project",

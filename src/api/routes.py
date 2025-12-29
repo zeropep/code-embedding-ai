@@ -632,8 +632,8 @@ async def process_project(
                 "status": "active"
             }
 
-            # Get remote latest commit if git_remote_url is available
-            if project.git_remote_url:
+            # Get remote latest commit if git_remote_url is available (only on success)
+            if result["status"] == "success" and project.git_remote_url:
                 try:
                     from ..updates.git_monitor import GitMonitor
                     git_monitor = GitMonitor(
